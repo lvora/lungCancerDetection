@@ -1,7 +1,15 @@
+```
 ![Logo of the project](https://www.ece.gatech.edu/sites/default/files/images/Media-Calendar/ece_circle-buzz.jpg)
+```
 
 # Kaggle Data Science Bowl 2017 - ECE 6254
 > Class project submission
+
+
+## Resources
+https://www.kaggle.com/c/data-science-bowl-2017
+https://www.kaggle.com/gzuidhof/data-science-bowl-2017/full-preprocessing-tutorial
+
 
 
 ## Installing / Getting started
