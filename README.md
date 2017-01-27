@@ -1,10 +1,8 @@
-![Logo of the project](https://raw.githubusercontent.com/jehna/readme-best-practices/master/sample-logo.png)
+![Logo of the project](https://www.ece.gatech.edu/sites/default/files/images/Media-Calendar/ece_circle-buzz.jpg)
 
-# Name of the project
-> Additional information or tagline
+# Kaggle Data Science Bowl 2017 - ECE 6254
+> Class project submission
 
-A brief description of your project, what it is used for and how does life get
-awesome when someone starts to use it.
 
 ## Installing / Getting started
 
