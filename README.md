@@ -37,6 +37,12 @@ pip install -r requirements.txt
 python
 ```
 
+If you do not have CUDA and cuDNN installed then pip install will fail with tensorflow-gpu.  Just install the regular one in your virtual environment:
+
+```shell
+pip install tensorflow
+```
+
 #### Test the environment
 ```python
 import cv2
