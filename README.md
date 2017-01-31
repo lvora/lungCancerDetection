@@ -18,14 +18,14 @@
 A quick introduction of the minimal setup you need to get running.
 
 ### Ubuntu 14.04
-Get necessary packages
+#### Get necessary packages
 ```shell
 sudo apt-get update
 sudo apt-get install git python3 python3-pip
 sudo -H pip3 install virutualenvwrapper
 ```
 
-Set up the environment
+#### Set up the environment
 ```shell
 mkdir ~/projects && cd ~/projects
 git clone https://github.gatech.edu/kds17/kds17.git
@@ -38,7 +38,7 @@ pip install -r requirements.txt
 python
 ```
 
-Test the environment
+#### Test the environment
 ```python
 import cv2
 import tensorflow as tf
