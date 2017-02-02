@@ -18,9 +18,12 @@
 """
 import numpy as np
 import cv2
+import dicom
 import os
 import csv
 import pprint
+from tqdm import tqdm
+from multiprocessing import Pool
 #import tensorflow as tf
 
 im_dir = '/home/charlie/Downloads/stage1'
@@ -39,21 +42,35 @@ class DicomDict:
 
     def __build_dict(self):
         dicom_dict = dict()
-        for root, dirs, files in os.walk(self.path_to_images):
-            path = root.split(os.sep)
-            top_id = os.path.basename(root)
-            dicom_dict[top_id] = {}
-            dicom_dict[top_id]['slice_count'] = len(files)
-            for file in files:
-                slice_id, _ = os.path.splitext(file)
-                dicom_dict[top_id][slice_id] = {}
+        try:
+            for root, dirs, files in os.walk(self.path_to_images):
+                path = root.split(os.sep)
+                top_id = os.path.basename(root)
+                if len(files) > 0:
+                    dicom_dict[top_id] = {}
+                    dicom_dict[top_id]['slice_count'] = len(files)
+        except:
+            print('Dictionary Failed')
         return self.__assign_labels(dicom_dict)
 
     def __assign_labels(self,dicom_dict):
-        with open(self.path_to_labels) as cf:
-            reader = csv.DictReader(cf,delimiter=',')
-            for row in reader:
-                dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
+        try:
+            with open(self.path_to_labels) as cf:
+                reader = csv.DictReader(cf,delimiter=',')
+                for row in reader:
+                    dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
+        except:
+            print('Labels not assigned')
+        return self.__filtered_dict(dicom_dict)
+
+    def __filtered_dict(self, dicom_dict):
+        del_count = 0
+        for x in list(dicom_dict.keys()):
+            for y in list(dicom_dict[x].keys()):
+                if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
+                    del_count += 1
+                    del dicom_dict[x]
+        print('Dictionary Built with %i items deleted for missing labels or images' % del_count)
         return dicom_dict
 
     def save(self, path_to_save): 
@@ -67,20 +84,40 @@ class DicomDict:
         print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
 
 class DicomImage:
-    def __init__(self, path_to_image, im_id):
+    def __init__(self, path_to_image,label, im_id):
         self.im_id = im_id
+        self.label = label
         self.path_to_image = path_to_image
+        self.slices = self.__load_image()
 
     def __load_image(self):
-        x = 0
+        slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
+        slices.sort(key = lambda x: int(x.ImagePositionPatient[2]))
+        try:
+            slice_thickness = np.abs(slices[0].ImagePositionPatient[2]-slices[1].ImagePositionPatient[2])
+        except:
+            slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
+        for s in slices:
+            s.SliceThickness = slice_thickness
+        return slices
 
-
+def helper(job_args):
+    return DicomImage(*job_args)
 
 def main(argv=None):
 
     x = DicomDict(im_dir, label_dir)
-    x.save('/home/charlie/projects/kds17')
+    #pprint.pprint(x.dicom_dict)
+
+    path_list = [os.path.join(x.path_to_images,k) for k, v in x.dicom_dict.items()]
+    print(path_list)
+    label_list = [list(j for i, j in v.items() if i == 'cancer')[0] for k, v in x.dicom_dict.items()]
+    id_list = list(x.dicom_dict.keys())
+    
+    job_args = [(path_list, label_list, id_list)]
+
+    p = Pool()
+    image_list = p.map(helper, job_args)
 
 if __name__ == '__main__':
-    main()
-    
+   main() 
