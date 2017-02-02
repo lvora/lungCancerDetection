@@ -35,12 +35,11 @@ class DicomDict:
     def __init__(self, path_to_images, path_to_labels):
         self.path_to_images = path_to_images
         self.path_to_labels = path_to_labels
-        self.dicom_dict = self.__build_dict(self.path_to_images, 
-                self.path_to_labels)
+        self.dicom_dict = self.__build_dict()
 
-    def __build_dict(self, path_to_images, path_to_labels):
+    def __build_dict(self):
         dicom_dict = dict()
-        for root, dirs, files in os.walk(path_to_images):
+        for root, dirs, files in os.walk(self.path_to_images):
             path = root.split(os.sep)
             top_id = os.path.basename(root)
             dicom_dict[top_id] = {}
@@ -48,10 +47,10 @@ class DicomDict:
             for file in files:
                 slice_id, _ = os.path.splitext(file)
                 dicom_dict[top_id][slice_id] = {}
-        return self.__assign_labels(path_to_labels, dicom_dict)
+        return self.__assign_labels(dicom_dict)
 
-    def __assign_labels(self, path_to_labels, dicom_dict):
-        with open(path_to_labels) as cf:
+    def __assign_labels(self,dicom_dict):
+        with open(self.path_to_labels) as cf:
             reader = csv.DictReader(cf,delimiter=',')
             for row in reader:
                 dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
@@ -68,12 +67,14 @@ class DicomDict:
         print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
 
 class DicomImage:
-    def __init__(self, im_dir):
+    def __init__(self, path_to_image, im_id):
         self.im_id = im_id
+        self.path_to_image = path_to_image
 
-class DicomSlice:
-    def __init__(self, slice_id):
-        self.slice_id = slice_id
+    def __load_image(self):
+        x = 0
+
+
 
 def main(argv=None):
 
