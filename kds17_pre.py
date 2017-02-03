@@ -16,15 +16,18 @@
 """Preprocessing of DICOM Images for Kaggle Data Science 2017
 
 """
+from __future__ import division
+import sys
+import psutil
+import dicom
+import csv
+import os
+from tqdm import tqdm
 import numpy as np
 import cv2
-import dicom
-import os
-import csv
-import pprint
-from tqdm import tqdm
-from multiprocessing import Pool
 #import tensorflow as tf
+#import pprint
+#import multiprocessing as mp
 
 im_dir = '/home/charlie/Downloads/stage1'
 label_dir = '/home/charlie/Downloads/stage1_labels.csv'
@@ -39,33 +42,60 @@ class DicomDict:
         self.path_to_images = path_to_images
         self.path_to_labels = path_to_labels
         self.dicom_dict = self.__build_dict()
+        self.total_size = self.__total_size()
+        self.job_args = [(os.path.join(self.path_to_images,k), list(j for i, j in v.items() if i == 'cancer')[0], k) for k, v in self.dicom_dict.items()]
+        self.batch_size_limit = self.__batch_limiter()
+
+    def __batch_limiter(self):
+        mem = psutil.virtual_memory()
+        tot = self.total_size
+
+        return mem.total//tot*len(self.job_args)//100*30
+
+    def __total_size(self):
+        total_size = 0
+        for s in list(self.dicom_dict.values()):
+            total_size += s['size']
+        return total_size
 
     def __build_dict(self):
+        print('Traversing folders')
         dicom_dict = dict()
         try:
-            for root, dirs, files in os.walk(self.path_to_images):
+            for root, dirs, files in tqdm(os.walk(self.path_to_images)):
                 path = root.split(os.sep)
                 top_id = os.path.basename(root)
                 if len(files) > 0:
                     dicom_dict[top_id] = {}
                     dicom_dict[top_id]['slice_count'] = len(files)
+                    dicom_dict[top_id]['size'] = 0
+                    for f in files:
+                        try:
+                            dicom_dict[top_id]['size'] += os.path.getsize(os.path.join(root, f))
+                        except FileNotFoundError:
+                            continue
         except:
-            print('Dictionary Failed')
+            raise ValueError('Dictionary Failed')
         return self.__assign_labels(dicom_dict)
 
     def __assign_labels(self,dicom_dict):
+        print('Assigning labels')
         try:
             with open(self.path_to_labels) as cf:
                 reader = csv.DictReader(cf,delimiter=',')
-                for row in reader:
+                for row in tqdm(reader):
                     dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
+        except KeyError:
+            pass
         except:
-            print('Labels not assigned')
+            raise ValueError('Labels not assigned')
+
         return self.__filtered_dict(dicom_dict)
 
     def __filtered_dict(self, dicom_dict):
+        print('Removing junk')
         del_count = 0
-        for x in list(dicom_dict.keys()):
+        for x in tqdm(list(dicom_dict.keys())):
             for y in list(dicom_dict[x].keys()):
                 if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
                     del_count += 1
@@ -84,13 +114,33 @@ class DicomDict:
         print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
 
 class DicomImage:
-    def __init__(self, path_to_image,label, im_id):
-        self.im_id = im_id
-        self.label = label
+    def __init__(self, path_to_image, label, im_id):
         self.path_to_image = path_to_image
-        self.slices = self.__load_image()
+        self.label = label
+        self.im_id = im_id
+        self.scan = self.__load_scan()
+        self.image = self.__load_image()
 
     def __load_image(self):
+        try:
+            image = np.stack([s.pixel_array for s in self.scan])
+            image = image.astype(np.int16)
+            image[image == -2000] = 0
+            for i in range(len(self.scan)):
+                intercept = self.scan[i].RescaleIntercept
+                slope = self.scan[i].RescaleSlope
+
+                if slope != 1:
+                    image[i] = slope * image[i].astype(np.float64)
+                    image[i] = image[i].astype(np.int16)
+
+                image[i] += np.int16(intercept)
+
+            return np.array(image, dtype=np.int16)
+        except:
+            pass
+
+    def __load_scan(self):
         slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
         slices.sort(key = lambda x: int(x.ImagePositionPatient[2]))
         try:
@@ -101,23 +151,27 @@ class DicomImage:
             s.SliceThickness = slice_thickness
         return slices
 
-def helper(job_args):
-    return DicomImage(*job_args)
+class DicomBatch:
+    def __init__(self, dicomDict):
+        self.job_args = dicomDict.job_args
+        self.total_samples = len(self.job_args)
+        self.all_dicomImages = self.__load_all_dicomImages()
+
+    def __dicom_images(self, job_args):
+        return DicomImage(*job_args)
+
+    def __load_batch_of_dicomImages(self):
+        self.im_batch = []
+        for k in tqdm(self.job_args):
+            self.im_batch.append(self.__dicom_images(k))
+        return self.im_batch
+
 
 def main(argv=None):
 
     x = DicomDict(im_dir, label_dir)
-    #pprint.pprint(x.dicom_dict)
-
-    path_list = [os.path.join(x.path_to_images,k) for k, v in x.dicom_dict.items()]
-    print(path_list)
-    label_list = [list(j for i, j in v.items() if i == 'cancer')[0] for k, v in x.dicom_dict.items()]
-    id_list = list(x.dicom_dict.keys())
-    
-    job_args = [(path_list, label_list, id_list)]
-
-    p = Pool()
-    image_list = p.map(helper, job_args)
+    print(x.batch_size_limit)
+    #y = DicomBatch(x)
 
 if __name__ == '__main__':
    main() 
