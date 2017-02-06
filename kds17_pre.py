@@ -37,14 +37,50 @@ class DicomDict:
     DicomDict constructs the dictionary of all DICOM images,
     their labels, collects useful metrics, and does basic error
     checking
+
+    Args:
+        path_to_images: Str of valid path to folder containing top level folders
+        path_to_labels: Str of valid path to csv file containing ids and labels
+
+    Retruns:
+        DicomDict.<args>
+        DicomDict.dicom_dict: Dictionary of the following structure
+
+            {top level scan id:
+            ---{'cancer':label}
+            ---{'slice_count':count of slices in scan}
+            ---{'size':file size in bytes}
+            }
+
+        DicomDict.total_size: Total size in bytes of all DICOM images
+        DicomDict.job_args: A list of tuples of the following structure
+
+            [(path_to_image_slice, label, top level scan id),(...)]
+
+        DicomDict.batch_size_limit:  An Int of recommended limit to batch size 
+            based on total memory available on system and total_size taking 
+            into account the necessary estimated overhead to perform batch 
+            processing
     '''
     def __init__(self, path_to_images, path_to_labels):
-        self.path_to_images = path_to_images
-        self.path_to_labels = path_to_labels
+        self.path_to_images = self.__check_path(path_to_images)
+        self.path_to_labels = self.__check_path(path_to_labels)
         self.dicom_dict = self.__build_dict()
         self.total_size = self.__total_size()
-        self.job_args = [(os.path.join(self.path_to_images,k), list(j for i, j in v.items() if i == 'cancer')[0], k) for k, v in self.dicom_dict.items()]
+        self.job_args = [(os.path.join(self.path_to_images,k), 
+            list(j for i, j in v.items() if i == 'cancer')[0], 
+            k) for k, v in self.dicom_dict.items()]
         self.batch_size_limit = self.__batch_limiter()
+        
+    def __check_path(self, path):
+        if os.path.isfile(path):
+            return path
+        else:
+            if os.path.isdir(path):
+                return path
+            else:
+                raise ValueError('There was nothing in %s' % path)
+
 
     def __batch_limiter(self):
         mem = psutil.virtual_memory()
@@ -114,21 +150,35 @@ class DicomDict:
         print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
 
 class DicomImage:
+    '''DicomImage 
+    This object stores the id, label, and an np.array of the CT scan.
+
+    Args:
+        path_to_image: String of path to top folder storing slices
+        label: Int of class label
+        im_id: name of top folder storing slices
+
+    Returns:
+        An object containing:
+
+        DicomImage.scan: np.array of scan
+        DicomImage.<Args>
+
+    '''
     def __init__(self, path_to_image, label, im_id):
         self.path_to_image = path_to_image
         self.label = label
         self.im_id = im_id
         self.scan = self.__load_scan()
-        self.image = self.__load_image()
 
-    def __load_image(self):
+    def __load_image(self, scan):
         try:
-            image = np.stack([s.pixel_array for s in self.scan])
+            image = np.stack([s.pixel_array for s in scan])
             image = image.astype(np.int16)
             image[image == -2000] = 0
-            for i in range(len(self.scan)):
-                intercept = self.scan[i].RescaleIntercept
-                slope = self.scan[i].RescaleSlope
+            for i in range(len(scan)):
+                intercept = scan[i].RescaleIntercept
+                slope = scan[i].RescaleSlope
 
                 if slope != 1:
                     image[i] = slope * image[i].astype(np.float64)
@@ -149,7 +199,7 @@ class DicomImage:
             slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
         for s in slices:
             s.SliceThickness = slice_thickness
-        return slices
+        return __load_image(slices)
 
 class DicomBatch:
     def __init__(self, dicomDict):
