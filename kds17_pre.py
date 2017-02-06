@@ -29,8 +29,8 @@ import cv2
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/Downloads/stage1'
-label_dir = '/home/charlie/Downloads/stage1_labels.csv'
+im_dir = '/home/charlie/kaggle_stage1'
+label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
 
 class DicomDict:
     ''' DicomDict
@@ -155,7 +155,7 @@ class DicomBatch:
     def __init__(self, dicomDict):
         self.job_args = dicomDict.job_args
         self.total_samples = len(self.job_args)
-        self.all_dicomImages = self.__load_all_dicomImages()
+        self.all_dicomImages = self.__load_batch_of_dicomImages()
 
     def __dicom_images(self, job_args):
         return DicomImage(*job_args)
@@ -171,7 +171,7 @@ def main(argv=None):
 
     x = DicomDict(im_dir, label_dir)
     print(x.batch_size_limit)
-    #y = DicomBatch(x)
+    y = DicomBatch(x)
 
 if __name__ == '__main__':
    main() 
