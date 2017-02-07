@@ -22,15 +22,17 @@ import psutil
 import dicom
 import csv
 import os
+import scipy.ndimage
 from tqdm import tqdm
 import numpy as np
 import cv2
+from matplotlib import pyplot as plt
 #import tensorflow as tf
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_data/stage1'
-label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
+im_dir = '/home/charlie/kaggle_stage1'
+label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
 
 class DicomDict:
     ''' DicomDict
@@ -162,6 +164,7 @@ class DicomImage:
         An object containing:
 
         DicomImage.scan: np.array of scan
+        DicomImage.spacing: 3x1 array of spacing adjustment on image
         DicomImage.<Args>
 
     '''
@@ -169,7 +172,27 @@ class DicomImage:
         self.path_to_image = path_to_image
         self.label = label
         self.im_id = im_id
-        self.scan = self.__load_scan()
+        self.scan, self.spacing = self.__load_scan()
+
+
+    def preview(self):
+        first_patient_pixels = self.scan
+        plt.imshow(first_patient_pixels[80], cmap=plt.cm.gray)
+        plt.show()
+
+    def __masking(self):
+        '''do something with masking'''
+
+        
+    def __resample(self, scan,image, new_spacing=[1,1,1]):
+        spacing = np.array([scan[0].SliceThickness] + scan[0].PixelSpacing, dtype=np.float32)
+        resize_factor = spacing / new_spacing
+        new_real_shape = image.shape * resize_factor
+        new_shape = np.round(new_real_shape)
+        real_resize_factor = new_shape / image.shape
+        new_spacing = spacing / real_resize_factor
+        image = scipy.ndimage.interpolation.zoom(image, real_resize_factor, mode='nearest') 
+        return image, new_spacing
 
     def __load_image(self, scan):
         try:
@@ -186,9 +209,10 @@ class DicomImage:
 
                 image[i] += np.int16(intercept)
 
-            return np.array(image, dtype=np.int16)
+            return self.__resample(scan, np.array(image, dtype=np.int16))
         except:
             pass
+
 
     def __load_scan(self):
         slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
@@ -205,7 +229,7 @@ class DicomBatch:
     def __init__(self, dicomDict):
         self.job_args = dicomDict.job_args
         self.total_samples = len(self.job_args)
-        self.all_dicomImages = self.__load_all_dicomImages()
+        self.all_dicomImages = self.__load_batch_of_dicomImages()
 
     def __dicom_images(self, job_args):
         return DicomImage(*job_args)
@@ -218,10 +242,10 @@ class DicomBatch:
 
 
 def main(argv=None):
-
     x = DicomDict(im_dir, label_dir)
     print(x.batch_size_limit)
-    #y = DicomBatch(x)
+    y = DicomBatch(x)
+    print(y.all_dicomImages[0].scan.shape)
 
 if __name__ == '__main__':
    main() 
