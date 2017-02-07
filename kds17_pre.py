@@ -29,8 +29,8 @@ import cv2
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/Downloads/stage1'
-label_dir = '/home/charlie/Downloads/stage1_labels.csv'
+im_dir = '/home/charlie/kaggle_data/stage1'
+label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
 
 class DicomDict:
     ''' DicomDict
@@ -199,7 +199,7 @@ class DicomImage:
             slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
         for s in slices:
             s.SliceThickness = slice_thickness
-        return __load_image(slices)
+        return self.__load_image(slices)
 
 class DicomBatch:
     def __init__(self, dicomDict):
