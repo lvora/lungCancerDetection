@@ -31,8 +31,8 @@ from matplotlib import pyplot as plt
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_stage1'
-label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+im_dir = '/home/charlie/kaggle_data'
+label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
 
 class DicomDict:
     ''' DicomDict
@@ -87,8 +87,8 @@ class DicomDict:
     def __batch_limiter(self):
         mem = psutil.virtual_memory()
         tot = self.total_size
-
-        return mem.total//tot*len(self.job_args)//100*30
+        limit = tot//mem.total//3
+        return limit
 
     def __total_size(self):
         total_size = 0
@@ -244,8 +244,8 @@ class DicomBatch:
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
     print(x.batch_size_limit)
-    y = DicomBatch(x)
-    print(y.all_dicomImages[0].scan.shape)
+    #y = DicomBatch(x)
+    #print(y.all_dicomImages[0].scan.shape)
 
 if __name__ == '__main__':
    main() 
