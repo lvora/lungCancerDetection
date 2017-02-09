@@ -28,13 +28,18 @@ from tqdm import tqdm
 import numpy as np
 import cv2
 import threading as th
+import pickle
 from matplotlib import pyplot as plt
+from skimage import measure, morphology
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
 #import tensorflow as tf
 #import pprint
 #import multiprocessing as mp
 
 im_dir = '/home/charlie/kaggle_stage1'
 label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+pickle_dir = '/home/charlie/kaggle_pickles/'
 
 class DicomDict:
     ''' DicomDict
@@ -181,7 +186,7 @@ class DicomImage:
         An object containing:
 
         DicomImage.scan: np.array of scan
-        DicomImage.spacing: 3x1 array of spacing adjustment on image
+        DicomImage.spacing: 3x1 array of spacing adjustment on image to normalize to 1mm^3
         DicomImage.<Args>
 
     '''
@@ -189,23 +194,37 @@ class DicomImage:
         self.path_to_image = path_to_image
         self.label = label
         self.im_id = im_id
-        self.scan = self.__load_scan()
-        self.image = self.__rescale()
-        self.spacing = np.array([self.scan[0].SliceThickness] +  self.scan[0].PixelSpacing, dtype=np.float32)
+        self.image, self.spacing = self.__load_scan()
 
-    def preview(self):
-        print(self.image.shape)
-        first_patient_pixels = self.image
-        plt.imshow(first_patient_pixels[80], cmap=plt.cm.gray)
+    def preview(self, threshold=-300):
+    # Position the scan upright, 
+    # so the head of the patient would be at the top facing the camera
+        p = self.image.transpose(2,1,0)
+
+        verts, faces = measure.marching_cubes(p, threshold)
+
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+
+    # Fancy indexing: `verts[faces]` to generate a collection of triangles
+        mesh = Poly3DCollection(verts[faces], alpha=0.1)
+        face_color = [0.5, 0.5, 1]
+        mesh.set_facecolor(face_color)
+        ax.add_collection3d(mesh)
+
+        ax.set_xlim(0, p.shape[0])
+        ax.set_ylim(0, p.shape[1])
+        ax.set_zlim(0, p.shape[2])
+
         plt.show()
 
-    def __rescale(self):
-        image = np.stack([s.pixel_array for s in self.scan])
+    def __rescale(self, slices):
+        image = np.stack([s.pixel_array for s in slices])
         image = image.astype(np.int16)
         image[image == -2000] = 0
-        for i in range(len(self.scan)):
-            intercept = self.scan[i].RescaleIntercept
-            slope = self.scan[i].RescaleSlope
+        for i in range(len(slices)):
+            intercept = slices[i].RescaleIntercept
+            slope = slices[i].RescaleSlope
             if slope != 1:
                 image[i] = slope * image[i].astype(np.float64)
                 image[i] = image[i].astype(np.int16)
@@ -222,14 +241,25 @@ class DicomImage:
             slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
         for s in slices:
             s.SliceThickness = slice_thickness
-        return slices
+
+        spacing = np.array([slices[0].SliceThickness] +  slices[0].PixelSpacing, dtype=np.float32)
+        return self.__rescale(slices), spacing
 
 class DicomBatch:
-    def __init__(self, dicomDict):
-        self.job_args = dicomDict.batched_job_args[0]
+    def __init__(self, dicomDict, name):
+        self.name = name
+        self.job_args = dicomDict.job_args
         self.total_samples = len(self.job_args)
         self.spacing = [1,1,1]
         self.batch = self.__load_batch_of_dicomImages()
+        self.processed = False
+        
+    def __maybe_mkdir(self, path):
+        if os.path.isdir(path):
+            return path
+        else:
+            os.path.mkdir(path)
+            return path
 
     def __dicom_images(self, job_args):
         return DicomImage(*job_args)
@@ -242,21 +272,23 @@ class DicomBatch:
         return im_batch
 
     def process_batch(self):
-        processes = []
+        threads = []
         stop_event = th.Event()
         for im in self.batch:
             p = th.Thread(target=self.__resample, args=(im,))
-            processes.append(p)
+            threads.append(p)
         now = time.strftime('%H:%M:%S',time.localtime())
-        print('\n%s - Batch processing %i images.' % (now,len(processes)))
+        print('%s - Batch processing %i images.' % (now,len(threads)))
             
         try:
-            [x.start() for x in processes]
-            for y in processes:
-                y.join()
+            [(x.start(), x.join()) for x in threads]
+            if not any(x.is_alive() for x in threads):
+                now = time.strftime('%H:%M:%S',time.localtime())
+                self.processed = True
+                print('%s - Batch Processing complete' % now)
         except KeyboardInterrupt:
             stop_event.set()
-            print('\nInterrupt Caught. Terminating now...')
+            print('Interrupt Caught. Terminating now...')
 
     def __masking(self):
         '''do something with masking'''
@@ -273,14 +305,60 @@ class DicomBatch:
         fin = time.time()
         tim = fin-start
         now = time.strftime('%H:%M:%S',time.localtime())
-        print('\n%s - Zoom complete in %.3f seconds '% (now,tim))
+        print('%s - Zoom complete in %.3f seconds '% (now,tim))
         im.spacing = new_spacing
+
+class DicomIO:
+    def __init__(self, pickle_dir):
+        self.pickle_dir = pickle_dir
+        self.path_exist = self.__check_path()
+        self.list = []
+
+    def __check_path(self):
+        if os.path.isdir(self.pickle_dir):
+            self.list = [f for f in os.listdir(self.pickle_dir) if os.path.isfile(os.path.join(self.pickle_dir, f))] 
+            return True
+        else:
+            os.mkdir(self.pickle_dir)
+            self.__check_path()
+
+    def save(self, dicomBatch): 
+        with open(os.path.join(self.pickle_dir,dicomBatch.name+'.pkl',), 'wb')as f:
+            pickle.dump(dicomBatch,f)
+        self.__check_path()
+
+        
+    def load(self, pickle_name=None): 
+        if pickle_name is not None:
+            with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
+                return pickle.load(f)
+        else:
+            self.__check_path()
+            batch_list = []
+            for k in self.list:
+                with open(os.path.join(self.pickle_dir,k), 'rb')as f:
+                    batch_list.append(pickle.load(f))
+            return batch_list                    
+
 
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
-    y = DicomBatch(x)
+
+    y = DicomBatch(x, 'test_batch')
     y.process_batch()
-    print(y.batch[0].image.shape)
+
+    f = DicomBatch(x, 'unprocessed_test_batch')
+
+    io = DicomIO(pickle_dir)
+    io.save(y)
+    io.save(f)
+
+    z = io.load()
+
+    print(io.list)
+    print(z[0].batch[0].image.shape)
+    print(z[1].batch[0].image.shape)
+
 
 if __name__ == '__main__':
    main() 
