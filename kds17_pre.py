@@ -23,15 +23,17 @@ import dicom
 import csv
 import os
 import scipy.ndimage
+import time
 from tqdm import tqdm
 import numpy as np
 import cv2
+import threading as th
 from matplotlib import pyplot as plt
 #import tensorflow as tf
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_data'
+im_dir = '/home/charlie/kaggle_data/stage1'
 label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
 
 class DicomDict:
@@ -73,6 +75,7 @@ class DicomDict:
             list(j for i, j in v.items() if i == 'cancer')[0], 
             k) for k, v in self.dicom_dict.items()]
         self.batch_size_limit = self.__batch_limiter()
+        self.batched_job_args = [self.job_args[i:i+self.batch_size_limit] for i in range(0,len(self.job_args), self.batch_size_limit)]
         
     def __check_path(self, path):
         if os.path.isfile(path):
@@ -87,7 +90,12 @@ class DicomDict:
     def __batch_limiter(self):
         mem = psutil.virtual_memory()
         tot = self.total_size
-        limit = tot//mem.total//3
+        if (20*tot//mem.total) < 1:
+            factor = 1
+        else:
+            factor = (20*tot//mem.total)
+        limit = len(self.job_args)//factor
+        print('Batch size limit set to %i' % limit)
         return limit
 
     def __total_size(self):
@@ -120,9 +128,17 @@ class DicomDict:
         print('Assigning labels')
         try:
             with open(self.path_to_labels) as cf:
-                reader = csv.DictReader(cf,delimiter=',')
-                for row in tqdm(reader):
-                    dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
+                try:
+                    reader = csv.DictReader(cf,delimiter=',')
+                except:
+                    raise FileNotFoundError('label file not found')
+
+                for row in reader:
+                    try:
+                        dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
+                    except:
+                        pass
+                        #print('%s image does not exist' % row['id'])
         except KeyError:
             pass
         except:
@@ -131,11 +147,12 @@ class DicomDict:
         return self.__filtered_dict(dicom_dict)
 
     def __filtered_dict(self, dicom_dict):
-        print('Removing junk')
         del_count = 0
         for x in tqdm(list(dicom_dict.keys())):
             for y in list(dicom_dict[x].keys()):
                 if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
+                    #print(x)
+                    #print(dicom_dict[x].keys())
                     del_count += 1
                     del dicom_dict[x]
         print('Dictionary Built with %i items deleted for missing labels or images' % del_count)
@@ -172,47 +189,29 @@ class DicomImage:
         self.path_to_image = path_to_image
         self.label = label
         self.im_id = im_id
-        self.scan, self.spacing = self.__load_scan()
-
+        self.scan = self.__load_scan()
+        self.image = self.__rescale()
+        self.spacing = np.array([self.scan[0].SliceThickness] +  self.scan[0].PixelSpacing, dtype=np.float32)
 
     def preview(self):
-        first_patient_pixels = self.scan
+        print(self.image.shape)
+        first_patient_pixels = self.image
         plt.imshow(first_patient_pixels[80], cmap=plt.cm.gray)
         plt.show()
 
-    def __masking(self):
-        '''do something with masking'''
-
-        
-    def __resample(self, scan,image, new_spacing=[1,1,1]):
-        spacing = np.array([scan[0].SliceThickness] + scan[0].PixelSpacing, dtype=np.float32)
-        resize_factor = spacing / new_spacing
-        new_real_shape = image.shape * resize_factor
-        new_shape = np.round(new_real_shape)
-        real_resize_factor = new_shape / image.shape
-        new_spacing = spacing / real_resize_factor
-        image = scipy.ndimage.interpolation.zoom(image, real_resize_factor, mode='nearest') 
-        return image, new_spacing
-
-    def __load_image(self, scan):
-        try:
-            image = np.stack([s.pixel_array for s in scan])
-            image = image.astype(np.int16)
-            image[image == -2000] = 0
-            for i in range(len(scan)):
-                intercept = scan[i].RescaleIntercept
-                slope = scan[i].RescaleSlope
-
-                if slope != 1:
-                    image[i] = slope * image[i].astype(np.float64)
-                    image[i] = image[i].astype(np.int16)
-
-                image[i] += np.int16(intercept)
-
-            return self.__resample(scan, np.array(image, dtype=np.int16))
-        except:
-            pass
-
+    def __rescale(self):
+        image = np.stack([s.pixel_array for s in self.scan])
+        image = image.astype(np.int16)
+        image[image == -2000] = 0
+        for i in range(len(self.scan)):
+            intercept = self.scan[i].RescaleIntercept
+            slope = self.scan[i].RescaleSlope
+            if slope != 1:
+                image[i] = slope * image[i].astype(np.float64)
+                image[i] = image[i].astype(np.int16)
+            image[i] += np.int16(intercept)
+        self.rescale_flag = True
+        return np.array(image, dtype=np.int16)
 
     def __load_scan(self):
         slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
@@ -223,29 +222,61 @@ class DicomImage:
             slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
         for s in slices:
             s.SliceThickness = slice_thickness
-        return self.__load_image(slices)
+        return slices
 
 class DicomBatch:
     def __init__(self, dicomDict):
-        self.job_args = dicomDict.job_args
+        self.job_args = dicomDict.batched_job_args[0]
         self.total_samples = len(self.job_args)
-        self.all_dicomImages = self.__load_batch_of_dicomImages()
+        self.batch = self.__load_batch_of_dicomImages()
+        self.spacing = [1,1,1]
 
     def __dicom_images(self, job_args):
         return DicomImage(*job_args)
 
     def __load_batch_of_dicomImages(self):
-        self.im_batch = []
+        im_batch = []
+        print('Loading image files as DicomImage objects into memory')
         for k in tqdm(self.job_args):
-            self.im_batch.append(self.__dicom_images(k))
-        return self.im_batch
+            im_batch.append(self.__dicom_images(k))
+        return im_batch
+
+    def process_batch(self):
+        processes = []
+        stop_event = th.Event()
+        for im in self.batch:
+            p = th.Thread(target=self.__resample, args=(im,))
+            processes.append(p)
+        now = time.strftime('%H:%M:%S',time.localtime())
+        print('\n%s - Batch processing %i images. Estimated time to complete %.3f minutes' % (now,len(processes), len(processes)*12/60))
+            
+        try:
+            [x.start() for x in processes]
+            for y in processes:
+                y.join()
+        except KeyboardInterrupt:
+            stop_event.set()
+            print('\nInterrupt Caught. Terminating now...')
+
+    def __masking(self):
+        '''do something with masking'''
+        
+    def __resample(self, im):
+        image = im.image
+        old_spacing = im.spacing
+        resize_factor = old_spacing / self.spacing
+        new_real_shape = image.shape * resize_factor
+        new_shape = np.round(new_real_shape)
+        real_resize_factor = new_shape / image.shape
+        new_spacing = old_spacing / real_resize_factor
+        image = scipy.ndimage.interpolation.zoom(image, real_resize_factor, mode='nearest') 
+        im.image = image
+        im.spacing = new_spacing
 
 
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
-    print(x.batch_size_limit)
-    #y = DicomBatch(x)
-    #print(y.all_dicomImages[0].scan.shape)
+    y = DicomBatch(x)
 
 if __name__ == '__main__':
    main() 
