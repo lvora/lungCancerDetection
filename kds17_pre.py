@@ -33,6 +33,7 @@ from matplotlib import pyplot as plt
 from skimage import measure, morphology
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+import kds17_io as kio
 #import tensorflow as tf
 #import pprint
 #import multiprocessing as mp
@@ -271,11 +272,13 @@ class DicomBatch:
             im_batch.append(self.__dicom_images(k))
         return im_batch
 
-    def process_batch(self):
+    def process_batch(self,f):
+        fun_dict = {'zoom':self.__resample, 
+                    'mask':self.__mask}
         threads = []
         stop_event = th.Event()
         for im in self.batch:
-            p = th.Thread(target=self.__resample, args=(im,))
+            p = th.Thread(target=fun_dict[f], args=(im,))
             threads.append(p)
         now = time.strftime('%H:%M:%S',time.localtime())
         print('%s - Batch processing %i images.' % (now,len(threads)))
@@ -290,7 +293,7 @@ class DicomBatch:
             stop_event.set()
             print('Interrupt Caught. Terminating now...')
 
-    def __masking(self):
+    def __mask(self):
         '''do something with masking'''
         
     def __resample(self, im):
@@ -308,48 +311,15 @@ class DicomBatch:
         print('%s - Zoom complete in %.3f seconds '% (now,tim))
         im.spacing = new_spacing
 
-class DicomIO:
-    def __init__(self, pickle_dir):
-        self.pickle_dir = pickle_dir
-        self.path_exist = self.__check_path()
-        self.list = []
-
-    def __check_path(self):
-        if os.path.isdir(self.pickle_dir):
-            self.list = [f for f in os.listdir(self.pickle_dir) if os.path.isfile(os.path.join(self.pickle_dir, f))] 
-            return True
-        else:
-            os.mkdir(self.pickle_dir)
-            self.__check_path()
-
-    def save(self, dicomBatch): 
-        with open(os.path.join(self.pickle_dir,dicomBatch.name+'.pkl',), 'wb')as f:
-            pickle.dump(dicomBatch,f)
-        self.__check_path()
-
-        
-    def load(self, pickle_name=None): 
-        if pickle_name is not None:
-            with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
-                return pickle.load(f)
-        else:
-            self.__check_path()
-            batch_list = []
-            for k in self.list:
-                with open(os.path.join(self.pickle_dir,k), 'rb')as f:
-                    batch_list.append(pickle.load(f))
-            return batch_list                    
-
-
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
 
     y = DicomBatch(x, 'test_batch')
-    y.process_batch()
+    y.process_batch('zoom')
 
     f = DicomBatch(x, 'unprocessed_test_batch')
 
-    io = DicomIO(pickle_dir)
+    io = kio.DicomIO(pickle_dir)
     io.save(y)
     io.save(f)
 
