@@ -264,7 +264,7 @@ class DicomBatch:
         DicomBatch.total_samples: 
         DicomBatch.spacing: 
         DicomBatch.batch: 
-        DicomBatch.processed: 
+        DicomBatch.process_list: 
         DicomBatch.<Args>
 
     '''
@@ -274,7 +274,7 @@ class DicomBatch:
         self.total_samples = len(self.job_args)
         self.spacing = [1,1,1]
         self.batch = self.__load_batch_of_dicomImages()
-        self.processed = False
+        self.process_list = []
         
     def __maybe_mkdir(self, path):
         if os.path.isdir(path):
@@ -308,13 +308,13 @@ class DicomBatch:
             [(x.start(), x.join()) for x in threads]
             if not any(x.is_alive() for x in threads):
                 now = time.strftime('%H:%M:%S',time.localtime())
-                self.processed = True
+                self.process_list.append(f) 
                 print('%s - Batch Processing complete' % now)
         except KeyboardInterrupt:
             stop_event.set()
             print('Interrupt Caught. Terminating now...')
 
-    def __mask(self):
+    def __mask(self, im):
         '''do something with masking'''
         
     def __resample(self, im):
@@ -333,21 +333,27 @@ class DicomBatch:
 
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
+    print(x.total_size>>20)
+    print(x.dicom_dict)
 
-    y = DicomBatch(x, 'test_batch')
-    y.process_batch('zoom')
+    #y = DicomBatch(x, 'test_batch')
+    #y.process_batch('zoom')
 
-    f = DicomBatch(x, 'unprocessed_test_batch')
+    #f = DicomBatch(x, 'unprocessed_test_batch')
+    #f.process_batch('mask')
 
-    io = kio.DicomIO(pickle_dir)
-    io.save(y)
-    io.save(f)
+    #io = kio.DicomIO(pickle_dir)
+    #io.save(y)
+    #io.save(f)
 
-    z = io.load()
+    #z = io.load()
+    #z[0].process_batch('zoom')
 
-    print(io.list)
-    print(z[0].batch[0].image.shape)
-    print(z[1].batch[0].image.shape)
+    #print(io.list)
+    #print(z[0].process_list)
+    #print(z[1].process_list)
+    #print(z[0].batch[0].image.shape)
+    #print(z[1].batch[0].image.shape)
 
 
 if __name__ == '__main__':
