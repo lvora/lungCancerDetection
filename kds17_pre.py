@@ -22,7 +22,7 @@ import psutil
 import dicom
 import csv
 import os
-import scipy.ndimage
+from scipy import ndimage as nd
 import time
 from tqdm import tqdm
 import numpy as np
@@ -219,59 +219,44 @@ class DicomImage:
         ax.set_zlim(0, p.shape[2])
 
         plt.show()
-    def __generate_mask(self):
-        '''generate mask'''
-def largest_label_volume(im, bg=-1):
-    vals, counts = np.unique(im, return_counts=True)
 
-    counts = counts[vals != bg]
-    vals = vals[vals != bg]
+    def __largest_label_volume(self,im, bg=-1):
+        vals, counts = np.unique(im, return_counts=True)
 
-    if len(counts) > 0:
-        return vals[np.argmax(counts)]
-    else:
-        return None
+        counts = counts[vals != bg]
+        vals = vals[vals != bg]
 
-def segment_lung_mask(image, fill_lung_structures=True):
+        if len(counts) > 0:
+            return vals[np.argmax(counts)]
+        else:
+            return None
 
-# not actually binary, but 1 and 2. 
-# 0 is treated as background, which we do not want
-    binary_image = np.array(image > -320, dtype=np.int8)+1
-    labels = measure.label(binary_image)
+    def __mask(self,image, fill_lung_structures=True):
+        binary_image = np.array(image > -320, dtype=np.int8)+1
+        labels = measure.label(binary_image)
 
-# Pick the pixel in the very corner to determine which label is air.
-#   Improvement: Pick multiple background labels from around the patient
-#   More resistant to "trays" on which the patient lays cutting the air 
-#   around the person in half
-    background_label = labels[0,0,0]
+        background_label = labels[0,0,0]
 
-#Fill the air around the person
-    binary_image[background_label == labels] = 2
+        binary_image[background_label == labels] = 2
 
+        if fill_lung_structures:
+            for i, axial_slice in enumerate(binary_image):
+                axial_slice = axial_slice - 1
+                labeling = measure.label(axial_slice)
+                l_max = self.__largest_label_volume(labeling, bg=0)
 
-# Method of filling the lung structures (that is superior to something like 
-# morphological closing)
-    if fill_lung_structures:
-# For every slice we determine the largest solid structure
-        for i, axial_slice in enumerate(binary_image):
-            axial_slice = axial_slice - 1
-            labeling = measure.label(axial_slice)
-            l_max = largest_label_volume(labeling, bg=0)
+                if l_max is not None: #This slice contains some lung
+                    binary_image[i][labeling != l_max] = 1
 
-            if l_max is not None: #This slice contains some lung
-                binary_image[i][labeling != l_max] = 1
+        binary_image -= 1 #Make the image actual binary
+        binary_image = 1-binary_image # Invert it, lungs are now 1
 
+        labels = measure.label(binary_image, background=0)
+        l_max = self.__largest_label_volume(labels, bg=0)
+        if l_max is not None: # There are air pockets
+            binary_image[labels != l_max] = 0
 
-    binary_image -= 1 #Make the image actual binary
-    binary_image = 1-binary_image # Invert it, lungs are now 1
-
-# Remove other air pockets insided body
-    labels = measure.label(binary_image, background=0)
-    l_max = largest_label_volume(labels, bg=0)
-    if l_max is not None: # There are air pockets
-        binary_image[labels != l_max] = 0
-
-    return binary_image
+        return image*nd.binary_dilation(binary_image, iterations=2)
 
     def __rescale(self, slices):
         image = np.stack([s.pixel_array for s in slices])
@@ -285,7 +270,7 @@ def segment_lung_mask(image, fill_lung_structures=True):
                 image[i] = image[i].astype(np.int16)
             image[i] += np.int16(intercept)
         self.rescale_flag = True
-        return np.array(image, dtype=np.int16)
+        return self.__mask(np.array(image, dtype=np.int16))
 
     def __load_scan(self):
         slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
@@ -348,15 +333,14 @@ class DicomBatch:
         return im_batch
 
     def process_batch(self,f):
-        fun_dict = {'zoom':self.__resample, 
-                    'mask':self.__mask}
+        fun_dict = {'zoom':self.__resample}
         threads = []
         stop_event = th.Event()
         for im in self.batch:
             p = th.Thread(target=fun_dict[f], args=(im,))
             threads.append(p)
         now = time.strftime('%H:%M:%S',time.localtime())
-        print('%s - Batch processing %i images.' % (now,len(threads)))
+        print('%s - Batch processing %i images with %s.' % (now,len(threads),f))
             
         try:
             [(x.start(), x.join()) for x in threads]
@@ -368,10 +352,6 @@ class DicomBatch:
             stop_event.set()
             print('Interrupt Caught. Terminating now...')
 
-    def __mask(self, im):
-        assert 'zoom' in self.process_list, 'You need to apply zoom via process_batch' 
-        assert 'mask' not in self.process_list, 'You don\'t need to mask this batch you have one.'
-        
     def __resample(self, im):
         resize_factor = im.spacing / self.spacing
         new_real_shape = im.image.shape * resize_factor
@@ -379,7 +359,7 @@ class DicomBatch:
         real_resize_factor = new_shape / im.image.shape
         new_spacing = im.spacing / real_resize_factor
         start = time.time()
-        im.image = scipy.ndimage.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
+        im.image = nd.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
         fin = time.time()
         tim = fin-start
         now = time.strftime('%H:%M:%S',time.localtime())
@@ -389,23 +369,23 @@ class DicomBatch:
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
 
-    #y = DicomBatch(x, 'test_batch')
-    #y.process_batch('zoom')
+    y = DicomBatch(x, 'test_batch')
+    y.process_batch('zoom')
 
     #f = DicomBatch(x, 'unprocessed_test_batch')
     #f.process_batch('mask')
 
-    #io = kio.DicomIO(pickle_dir)
-    #io.save(y)
+    io = kio.DicomIO(pickle_dir)
+    io.save(y)
     #io.save(f)
 
-    #z = io.load()
+    z = io.load()
     #z[0].process_batch('zoom')
 
-    #print(io.list)
+    print(io.list)
     #print(z[0].process_list)
     #print(z[1].process_list)
-    #print(z[0].batch[0].image.shape)
+    print(z[0].batch[0].image.shape)
     #print(z[1].batch[0].image.shape)
 
 
