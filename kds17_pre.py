@@ -247,6 +247,27 @@ class DicomImage:
         return self.__rescale(slices), spacing
 
 class DicomBatch:
+    '''DicomBatch 
+    This object stores a list of DicomImage objects and performs batch processing
+
+    Args:
+        DicomDict:
+        name:
+
+    Methods:
+        DicomBatch.process_batch(f):
+
+    Returns:
+        An object containing:
+
+        DicomBatch.job_args: 
+        DicomBatch.total_samples: 
+        DicomBatch.spacing: 
+        DicomBatch.batch: 
+        DicomBatch.processed: 
+        DicomBatch.<Args>
+
+    '''
     def __init__(self, dicomDict, name):
         self.name = name
         self.job_args = dicomDict.job_args
@@ -297,12 +318,11 @@ class DicomBatch:
         '''do something with masking'''
         
     def __resample(self, im):
-        old_spacing = im.spacing
-        resize_factor = old_spacing / self.spacing
+        resize_factor = im.spacing / self.spacing
         new_real_shape = im.image.shape * resize_factor
         new_shape = np.round(new_real_shape)
         real_resize_factor = new_shape / im.image.shape
-        new_spacing = old_spacing / real_resize_factor
+        new_spacing = im.spacing / real_resize_factor
         start = time.time()
         im.image = scipy.ndimage.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
         fin = time.time()
