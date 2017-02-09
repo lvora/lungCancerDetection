@@ -25,6 +25,18 @@ import pickle
 
 
 class DicomIO:
+    ''' DicomIO
+    DicomIO handles loading saving and checking of the dicom pickle files
+
+    Args:
+        pickle_dir: valid path to directory containing pickle files or
+                    where they should be saved
+    Retruns:
+        DicomIO.<args>
+        DicomIO.path_exist: Boolean indicating whether the path exists
+        DicomIO.list: List containing the names of all files in pickle_dir
+
+    '''
     def __init__(self, pickle_dir):
         self.pickle_dir = pickle_dir
         self.path_exist = self.__check_path()
