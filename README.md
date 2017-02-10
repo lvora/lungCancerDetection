@@ -1,4 +1,3 @@
-![Logo of the project](examples/1_0015ceb851d7251b8f399e39779d1e7d.gif)
 
 # Kaggle Data Science Bowl 2017 - ECE 6254
 > Class project submission
