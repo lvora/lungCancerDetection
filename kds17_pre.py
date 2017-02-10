@@ -22,6 +22,8 @@ import psutil
 import dicom
 import csv
 import os
+import matplotlib
+matplotlib.use("TkAgg")
 from scipy import ndimage as nd
 import time
 from tqdm import tqdm
@@ -30,17 +32,19 @@ import cv2
 import threading as th
 import pickle
 from matplotlib import pyplot as plt
+from matplotlib import animation as an
 from skimage import measure, morphology
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from mpl_toolkits.mplot3d import Axes3D
 
 import kds17_io as kio
 #import tensorflow as tf
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_stage1'
-label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
-pickle_dir = '/home/charlie/kaggle_pickles/'
+im_dir = '/home/charlie/kaggle_data/test'
+label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
+pickle_dir = '/home/charlie/kaggle_data/pickles'
 
 class DicomDict:
     ''' DicomDict
@@ -198,34 +202,21 @@ class DicomImage:
         self.im_id = im_id
         self.image, self.spacing = self.__load_scan()
 
-    def preview(self, threshold=-300):
-    # Position the scan upright, 
-    # so the head of the patient would be at the top facing the camera
-        p = self.image.transpose(2,1,0)
-
-        verts, faces = measure.marching_cubes(p, threshold)
-
-        fig = plt.figure(figsize=(10, 10))
-        ax = fig.add_subplot(111, projection='3d')
-
-    # Fancy indexing: `verts[faces]` to generate a collection of triangles
-        mesh = Poly3DCollection(verts[faces], alpha=0.1)
-        face_color = [0.5, 0.5, 1]
-        mesh.set_facecolor(face_color)
-        ax.add_collection3d(mesh)
-
-        ax.set_xlim(0, p.shape[0])
-        ax.set_ylim(0, p.shape[1])
-        ax.set_zlim(0, p.shape[2])
-
+    def animate(self):
+        fig = plt.figure()
+        fig.suptitle('%s with label %s' % (self.im_id, self.label))
+        ims = []
+        ax = fig.add_subplot(111)
+        for i in range(self.image.shape[0]):
+            im = plt.imshow(self.image[i], cmap=plt.cm.plasma)
+            ims.append([im])
+        ani = an.ArtistAnimation(fig, ims, interval=50, blit=True)
         plt.show()
 
     def __largest_label_volume(self,im, bg=-1):
         vals, counts = np.unique(im, return_counts=True)
-
         counts = counts[vals != bg]
         vals = vals[vals != bg]
-
         if len(counts) > 0:
             return vals[np.argmax(counts)]
         else:
@@ -234,8 +225,12 @@ class DicomImage:
     def __mask(self,image, fill_lung_structures=True):
         binary_image = np.array(image > -320, dtype=np.int8)+1
         labels = measure.label(binary_image)
+        bbr = np.array(labels.shape)-1
+        top = labels[bbr[0],bbr[1],bbr[2]]
+        mid = labels[0,bbr[1],bbr[2]]
+        bot = labels[0,0,0]
 
-        background_label = labels[0,0,0]
+        background_label = (top+mid+bot)/3
 
         binary_image[background_label == labels] = 2
 
@@ -255,8 +250,12 @@ class DicomImage:
         l_max = self.__largest_label_volume(labels, bg=0)
         if l_max is not None: # There are air pockets
             binary_image[labels != l_max] = 0
+        if binary_image[np.nonzero(binary_image)].shape[0] < 2000000:
+            return image
 
-        return image*nd.binary_dilation(binary_image, iterations=2)
+        else:
+            return image*nd.binary_dilation(binary_image, iterations=2)
+
 
     def __rescale(self, slices):
         image = np.stack([s.pixel_array for s in slices])
@@ -270,6 +269,7 @@ class DicomImage:
                 image[i] = image[i].astype(np.int16)
             image[i] += np.int16(intercept)
         self.rescale_flag = True
+        #return self.__mask(np.array(image, dtype=np.int16))
         return self.__mask(np.array(image, dtype=np.int16))
 
     def __load_scan(self):
@@ -366,27 +366,23 @@ class DicomBatch:
         print('%s - Zoom complete in %.3f seconds '% (now,tim))
         im.spacing = new_spacing
 
+
 def main(argv=None):
     x = DicomDict(im_dir, label_dir)
 
-    y = DicomBatch(x, 'test_batch')
+    y = DicomBatch(x, 'test_batch1')
     y.process_batch('zoom')
-
-    #f = DicomBatch(x, 'unprocessed_test_batch')
-    #f.process_batch('mask')
 
     io = kio.DicomIO(pickle_dir)
     io.save(y)
-    #io.save(f)
 
     z = io.load()
-    #z[0].process_batch('zoom')
 
-    print(io.list)
-    #print(z[0].process_list)
-    #print(z[1].process_list)
-    print(z[0].batch[0].image.shape)
-    #print(z[1].batch[0].image.shape)
+    z[1].batch[2].animate()
+    #z[1].batch[3].animate()
+    
+    #print(z[0].batch[0].image.shape)
+    print(z[1].batch[4].image.shape)
 
 
 if __name__ == '__main__':
