@@ -42,9 +42,9 @@ import kds17_io as kio
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_data/test'
-label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-pickle_dir = '/home/charlie/kaggle_data/pickles'
+im_dir = '/home/charlie/kaggle_stage1/'
+label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+pickle_dir = '/home/charlie/kaggle_pickles'
 
 class DicomDict:
     ''' DicomDict
@@ -224,6 +224,7 @@ class DicomImage:
 
     def __mask(self,image, fill_lung_structures=True):
         binary_image = np.array(image > -320, dtype=np.int8)+1
+        binary_image_coarse = binary_image
         labels = measure.label(binary_image)
         bbr = np.array(labels.shape)-1
         top = labels[bbr[0],bbr[1],bbr[2]]
@@ -251,10 +252,9 @@ class DicomImage:
         if l_max is not None: # There are air pockets
             binary_image[labels != l_max] = 0
         if binary_image[np.nonzero(binary_image)].shape[0] < 2000000:
-            return image
-
+            return image*nd.binary_dilation(binary_image_coarse, iterations=4)
         else:
-            return image*nd.binary_dilation(binary_image, iterations=2)
+            return image*nd.binary_dilation(binary_image, iterations=4)
 
 
     def __rescale(self, slices):
@@ -270,7 +270,7 @@ class DicomImage:
             image[i] += np.int16(intercept)
         self.rescale_flag = True
         #return self.__mask(np.array(image, dtype=np.int16))
-        return self.__mask(np.array(image, dtype=np.int16))
+        return self.__mask(np.array(image,  dtype=np.int16),fill_lung_structures=False)
 
     def __load_scan(self):
         slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
@@ -368,21 +368,20 @@ class DicomBatch:
 
 
 def main(argv=None):
-    x = DicomDict(im_dir, label_dir)
+    #x = DicomDict(im_dir, label_dir)
 
-    y = DicomBatch(x, 'test_batch1')
-    y.process_batch('zoom')
+    #y = DicomBatch(x, 'test_batch3')
+    #y.process_batch('zoom')
 
     io = kio.DicomIO(pickle_dir)
-    io.save(y)
+    #io.save(y)
 
-    z = io.load()
+    z = io.load('test_batch3.pkl')
 
-    z[1].batch[2].animate()
-    #z[1].batch[3].animate()
+    z.batch[0].animate()
     
-    #print(z[0].batch[0].image.shape)
-    print(z[1].batch[4].image.shape)
+    print(z[0].batch[0].label)
+    #print(z[1].batch[4].image.shape)
 
 
 if __name__ == '__main__':
