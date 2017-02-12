@@ -62,12 +62,12 @@ class DicomIO:
         if pickle_name is not None:
             print('Loading %s from %s' % (pickle_name, self.pickle_dir))
             with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
-                return pickle.load(f)
+                return [pickle.load(f)]
         else:
             self.__check_path()
             batch_list = []
+            print('Loading everything from %s' % (self.pickle_dir))
             for k in self.list:
-                print('Loading everything from %s' % (self.pickle_dir))
                 with open(os.path.join(self.pickle_dir,k), 'rb')as f:
                     batch_list.append(pickle.load(f))
             return batch_list                    
