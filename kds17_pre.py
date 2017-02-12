@@ -39,8 +39,8 @@ import kds17_io as kio
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_stage1/'
-label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+im_dir = '/home/charlie/kaggle_data/test'
+label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
 pickle_dir = '/home/charlie/kaggle_pickles'
 
 class DicomDict:
@@ -221,7 +221,6 @@ class DicomImage:
 
     def __mask(self,image, fill_lung_structures=True):
         binary_image = np.array(image > -320, dtype=np.int8)+1
-        binary_image_coarse = np.array(image[image>-320], dtype=np.int8)+1-image
         labels = measure.label(binary_image)
         bbr = np.array(labels.shape)-1
         top = labels[bbr[0],bbr[1],bbr[2]]
@@ -249,7 +248,7 @@ class DicomImage:
         if l_max is not None: # There are air pockets
             binary_image[labels != l_max] = 0
         if binary_image[np.nonzero(binary_image)].shape[0] < 2000000:
-            return image*nd.binary_dilation(binary_image_coarse, iterations=4)
+            return image
         else:
             return image*nd.binary_dilation(binary_image, iterations=4)
 
@@ -373,9 +372,9 @@ def main(argv=None):
     io = kio.DicomIO(pickle_dir)
     #io.save(y)
 
-    z = io.load('test_batch3.pkl')
+    z = io.load()
 
-    z.batch[0].animate()
+    z[0].batch[0].animate()
     
     print(z[0].batch[0].label)
     #print(z[1].batch[4].image.shape)
