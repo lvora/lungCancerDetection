@@ -28,7 +28,7 @@ def animate(image):
     for i in range(image.shape[0]):
         im = plt.imshow(image[i], cmap=plt.cm.gray)
         ims.append([im])
-    ani = an.ArtistAnimation(fig, ims, interval=150, blit=True)
+    ani = an.ArtistAnimation(fig, ims, interval=50, blit=True)
     print('Animating')
     plt.show()
 
