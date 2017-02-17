@@ -23,25 +23,19 @@ import dicom
 import csv
 import os
 from scipy import ndimage as nd
-import time
 from tqdm import tqdm
 import numpy as np
 import cv2
-import threading as th
 import pickle
 from matplotlib import pyplot as plt
 from matplotlib import animation as an
 from skimage import measure, morphology
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-import kds17_io as kio
-#import tensorflow as tf
-#import pprint
-#import multiprocessing as mp
+import threading
+import logging
 
-im_dir = '/home/charlie/kaggle_data/test'
-label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-pickle_dir = '/home/charlie/kaggle_pickles'
+logging.basicConfig(level=logging.DEBUG, format='[%(threadName)-9s] %(message)s',)
 
 class DicomDict:
     ''' DicomDict
@@ -155,7 +149,7 @@ class DicomDict:
 
     def __filtered_dict(self, dicom_dict):
         del_count = 0
-        for x in tqdm(list(dicom_dict.keys())):
+        for x in list(dicom_dict.keys()):
             for y in list(dicom_dict[x].keys()):
                 if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
                     #print(x)
@@ -199,16 +193,85 @@ class DicomImage:
         self.im_id = im_id
         self.image, self.spacing = self.__load_scan()
 
-    def animate(self):
-        fig = plt.figure()
-        fig.suptitle('%s with label %s' % (self.im_id, self.label))
-        ims = []
-        ax = fig.add_subplot(111)
-        for i in range(self.image.shape[0]):
-            im = plt.imshow(self.image[i], cmap=plt.cm.plasma)
-            ims.append([im])
-        ani = an.ArtistAnimation(fig, ims, interval=50, blit=True)
-        plt.show()
+    def __rescale(self, slices):
+        image = np.stack([s.pixel_array for s in slices])
+        image = image.astype(np.int16)
+        image[image == -2000] = 0
+        for i in range(len(slices)):
+            intercept = slices[i].RescaleIntercept
+            slope = slices[i].RescaleSlope
+            if slope != 1:
+                image[i] = slope * image[i].astype(np.float64)
+                image[i] = image[i].astype(np.int16)
+            image[i] += np.int16(intercept)
+        self.rescale_flag = True
+        return image
+
+    def __load_scan(self):
+        slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
+        slices.sort(key = lambda x: int(x.ImagePositionPatient[2]))
+        try:
+            slice_thickness = np.abs(slices[0].ImagePositionPatient[2]-slices[1].ImagePositionPatient[2])
+        except:
+            slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
+        for s in slices:
+            s.SliceThickness = slice_thickness
+
+        spacing = np.array([slices[0].SliceThickness] +  slices[0].PixelSpacing, dtype=np.float32)
+        return self.__rescale(slices), spacing
+
+class DicomBatch:
+    '''DicomBatch 
+    This object stores a list of DicomImage objects and performs batch processing
+
+    Args:
+        DicomDict:
+        name:
+
+    Methods:
+        DicomBatch.process_batch(f):
+
+    Returns:
+        An object containing:
+
+        DicomBatch.job_args: 
+        DicomBatch.total_samples: 
+        DicomBatch.spacing: 
+        DicomBatch.batch: 
+        DicomBatch.<Args>
+    '''
+
+    def __init__(self, job_args, name):
+        self.name = name
+        self.job_args = job_args
+        self.total_samples = len(self.job_args)
+        self.batch = self.__load_batch_of_dicomImages()
+        
+    def __dicom_images(self, job_args):
+        return DicomImage(*job_args)
+
+    def __load_batch_of_dicomImages(self):
+        im_batch = []
+        print('Loading image files as DicomImage objects into DicomBatch')
+        for k in tqdm(self.job_args):
+            im_batch.append(self.__dicom_images(k))
+        return im_batch
+
+class ProcessDicomBatch(threading.Thread):
+    def __init__(self,group=None, target=None, name=None, DicomImage=(), verbose=None):
+        super().__init__(group=group, target=target, name=name)
+        self.DicomImage = DicomImage
+        return
+
+    def run(self):
+        #logging.debug('Processing Image')
+        im = self.DicomImage
+        im.image = self.__mask(np.array(im.image,  dtype=np.int16),fill_lung_structures=False)
+        spacing = [1,1,1]
+        resize_factor = im.spacing / spacing
+        real_resize_factor = np.round(im.image.shape * resize_factor) / im.image.shape
+        im.spacing = im.spacing / real_resize_factor
+        im.image = nd.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
 
     def __largest_label_volume(self,im, bg=-1):
         vals, counts = np.unique(im, return_counts=True)
@@ -251,134 +314,3 @@ class DicomImage:
             return image
         else:
             return image*nd.binary_dilation(binary_image, iterations=4)
-
-
-    def __rescale(self, slices):
-        image = np.stack([s.pixel_array for s in slices])
-        image = image.astype(np.int16)
-        image[image == -2000] = 0
-        for i in range(len(slices)):
-            intercept = slices[i].RescaleIntercept
-            slope = slices[i].RescaleSlope
-            if slope != 1:
-                image[i] = slope * image[i].astype(np.float64)
-                image[i] = image[i].astype(np.int16)
-            image[i] += np.int16(intercept)
-        self.rescale_flag = True
-        #return self.__mask(np.array(image, dtype=np.int16))
-        return self.__mask(np.array(image,  dtype=np.int16),fill_lung_structures=False)
-
-    def __load_scan(self):
-        slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
-        slices.sort(key = lambda x: int(x.ImagePositionPatient[2]))
-        try:
-            slice_thickness = np.abs(slices[0].ImagePositionPatient[2]-slices[1].ImagePositionPatient[2])
-        except:
-            slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
-        for s in slices:
-            s.SliceThickness = slice_thickness
-
-        spacing = np.array([slices[0].SliceThickness] +  slices[0].PixelSpacing, dtype=np.float32)
-        return self.__rescale(slices), spacing
-
-class DicomBatch:
-    '''DicomBatch 
-    This object stores a list of DicomImage objects and performs batch processing
-
-    Args:
-        DicomDict:
-        name:
-
-    Methods:
-        DicomBatch.process_batch(f):
-
-    Returns:
-        An object containing:
-
-        DicomBatch.job_args: 
-        DicomBatch.total_samples: 
-        DicomBatch.spacing: 
-        DicomBatch.batch: 
-        DicomBatch.process_list: 
-        DicomBatch.<Args>
-
-    '''
-    def __init__(self, dicomDict, name):
-        self.name = name
-        self.job_args = dicomDict.job_args
-        self.total_samples = len(self.job_args)
-        self.spacing = [1,1,1]
-        self.batch = self.__load_batch_of_dicomImages()
-        self.process_list = []
-        
-    def __maybe_mkdir(self, path):
-        if os.path.isdir(path):
-            return path
-        else:
-            os.path.mkdir(path)
-            return path
-
-    def __dicom_images(self, job_args):
-        return DicomImage(*job_args)
-
-    def __load_batch_of_dicomImages(self):
-        im_batch = []
-        print('Loading image files as DicomImage objects into memory')
-        for k in tqdm(self.job_args):
-            im_batch.append(self.__dicom_images(k))
-        return im_batch
-
-    def process_batch(self,f):
-        fun_dict = {'zoom':self.__resample}
-        threads = []
-        stop_event = th.Event()
-        for im in self.batch:
-            p = th.Thread(target=fun_dict[f], args=(im,))
-            threads.append(p)
-        now = time.strftime('%H:%M:%S',time.localtime())
-        print('%s - Batch processing %i images with %s.' % (now,len(threads),f))
-            
-        try:
-            [(x.start(), x.join()) for x in threads]
-            if not any(x.is_alive() for x in threads):
-                now = time.strftime('%H:%M:%S',time.localtime())
-                self.process_list.append(f) 
-                print('%s - Batch Processing complete' % now)
-        except KeyboardInterrupt:
-            stop_event.set()
-            print('Interrupt Caught. Terminating now...')
-
-    def __resample(self, im):
-        resize_factor = im.spacing / self.spacing
-        new_real_shape = im.image.shape * resize_factor
-        new_shape = np.round(new_real_shape)
-        real_resize_factor = new_shape / im.image.shape
-        new_spacing = im.spacing / real_resize_factor
-        start = time.time()
-        im.image = nd.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
-        fin = time.time()
-        tim = fin-start
-        now = time.strftime('%H:%M:%S',time.localtime())
-        print('%s - Zoom complete in %.3f seconds '% (now,tim))
-        im.spacing = new_spacing
-
-
-def main(argv=None):
-    #x = DicomDict(im_dir, label_dir)
-
-    #y = DicomBatch(x, 'test_batch3')
-    #y.process_batch('zoom')
-
-    io = kio.DicomIO(pickle_dir)
-    #io.save(y)
-
-    z = io.load()
-
-    z[0].batch[0].animate()
-    
-    print(z[0].batch[0].label)
-    #print(z[1].batch[4].image.shape)
-
-
-if __name__ == '__main__':
-   main() 
