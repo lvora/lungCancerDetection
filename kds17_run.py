@@ -13,35 +13,46 @@
 # limitations under the License.
 # ==============================================================================
 
-import kds17_pre as pre
 import kds17_io as kio
-import numpy as np
-
-
+import kds17_vis as vis
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data/stage1'
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickle/'
+# This is the top level folder containing all scan folders
+    im_dir = '/home/charlie/kaggle_stage1' 
 
-    x = pre.DicomDict(im_dir, label_dir)
-    io = kio.DicomIO(pickle_dir)
-    for i,args in enumerate(tqdm(x.batched_job_args)):
-        y = pre.DicomBatch(args, 'batch_%i'% i)
-        threads = []
-        for im in y.batch:
-            t = pre.ProcessDicomBatch(DicomImage=im)
-            t.setDaemon(True)
-            threads.append(t)
-        [t.start() for t in threads]
-        print('Preprocessing images for batch_%i'% i)
-        [t.join() for t in threads]
-        io.save(y)
+# This is the path to the labels in csv
+    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
 
-    print(z[0].batch[0].image.shape)
+# This will be created if it does not exist
+    pickle_dir = '/home/charlie/kaggle_pickle/' 
 
+# Creating an IO object with working directories 
+# im_dir and label_dir are not required after
+# batches exist in your pickle_dir
+    io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
 
-    
+# This will save a dictionary.pkl in your pickle_dir
+    io.save_dict()
+
+# This is demonstrating accessing an attribute from the DicomDict object
+    print(io.DicomDict.batch_size_limit)
+
+# This will queue all valid image/label pairs in batches that are <= batch_size_limit
+# then it will conduct all preprocessing in threads that should not exceed
+# system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
+# am assuming it works.
+    io.build_batch()
+        
+# This is an example of loading all batches from your pickle_dir into a list of
+# DicomBatch objects
+    z = io.load_batch()
+        
+# This is an example of loading an image from the batch attribute within the loaded
+# DicomBatch object
+    im = z[0].batch[0].image
+        
+# Let's look at it!
+    vis.animate(im)
 
 if __name__ == '__main__':
     main()
