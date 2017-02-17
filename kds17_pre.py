@@ -17,7 +17,6 @@
 
 """
 from __future__ import division
-import sys
 import psutil
 import dicom
 import csv
@@ -25,149 +24,11 @@ import os
 from scipy import ndimage as nd
 from tqdm import tqdm
 import numpy as np
-import cv2
-import pickle
-from matplotlib import pyplot as plt
-from matplotlib import animation as an
 from skimage import measure, morphology
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
 import threading
 import logging
 
 logging.basicConfig(level=logging.DEBUG, format='[%(threadName)-9s] %(message)s',)
-
-class DicomDict:
-    ''' DicomDict
-    DicomDict constructs the dictionary of all DICOM images,
-    their labels, collects useful metrics, and does basic error
-    checking
-
-    Args:
-        path_to_images: Str of valid path to folder containing top level folders
-        path_to_labels: Str of valid path to csv file containing ids and labels
-
-    Retruns:
-        DicomDict.<args>
-        DicomDict.dicom_dict: Dictionary of the following structure
-
-            {top level scan id:
-            ---{'cancer':label}
-            ---{'slice_count':count of slices in scan}
-            ---{'size':file size in bytes}
-            }
-
-        DicomDict.total_size: Total size in bytes of all DICOM images
-        DicomDict.job_args: A list of tuples of the following structure
-
-            [(path_to_image_slice, label, top level scan id),(...)]
-
-        DicomDict.batch_size_limit:  An Int of recommended limit to batch size 
-            based on total memory available on system and total_size taking 
-            into account the necessary estimated overhead to perform batch 
-            processing
-    '''
-    def __init__(self, path_to_images, path_to_labels):
-        self.path_to_images = self.__check_path(path_to_images)
-        self.path_to_labels = self.__check_path(path_to_labels)
-        self.dicom_dict = self.__build_dict()
-        self.total_size = self.__total_size()
-        self.job_args = [(os.path.join(self.path_to_images,k), 
-            list(j for i, j in v.items() if i == 'cancer')[0], 
-            k) for k, v in self.dicom_dict.items()]
-        self.batch_size_limit = self.__batch_limiter()
-        self.batched_job_args = [self.job_args[i:i+self.batch_size_limit] for i in range(0,len(self.job_args), self.batch_size_limit)]
-        
-    def __check_path(self, path):
-        if os.path.isfile(path):
-            return path
-        else:
-            if os.path.isdir(path):
-                return path
-            else:
-                raise ValueError('There was nothing in %s' % path)
-
-
-    def __batch_limiter(self):
-        mem = psutil.virtual_memory()
-        tot = self.total_size
-        if (20*tot//mem.total) < 1:
-            factor = 1
-        else:
-            factor = (20*tot//mem.total)
-        limit = len(self.job_args)//factor
-        print('Batch size limit set to %i' % limit)
-        return limit
-
-    def __total_size(self):
-        total_size = 0
-        for s in list(self.dicom_dict.values()):
-            total_size += s['size']
-        return total_size
-
-    def __build_dict(self):
-        print('Traversing folders')
-        dicom_dict = dict()
-        try:
-            for root, dirs, files in tqdm(os.walk(self.path_to_images)):
-                path = root.split(os.sep)
-                top_id = os.path.basename(root)
-                if len(files) > 0:
-                    dicom_dict[top_id] = {}
-                    dicom_dict[top_id]['slice_count'] = len(files)
-                    dicom_dict[top_id]['size'] = 0
-                    for f in files:
-                        try:
-                            dicom_dict[top_id]['size'] += os.path.getsize(os.path.join(root, f))
-                        except FileNotFoundError:
-                            continue
-        except:
-            raise ValueError('Dictionary Failed')
-        return self.__assign_labels(dicom_dict)
-
-    def __assign_labels(self,dicom_dict):
-        print('Assigning labels')
-        try:
-            with open(self.path_to_labels) as cf:
-                try:
-                    reader = csv.DictReader(cf,delimiter=',')
-                except:
-                    raise FileNotFoundError('label file not found')
-
-                for row in reader:
-                    try:
-                        dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
-                    except:
-                        pass
-                        #print('%s image does not exist' % row['id'])
-        except KeyError:
-            pass
-        except:
-            raise ValueError('Labels not assigned')
-
-        return self.__filtered_dict(dicom_dict)
-
-    def __filtered_dict(self, dicom_dict):
-        del_count = 0
-        for x in list(dicom_dict.keys()):
-            for y in list(dicom_dict[x].keys()):
-                if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
-                    #print(x)
-                    #print(dicom_dict[x].keys())
-                    del_count += 1
-                    del dicom_dict[x]
-        print('Dictionary Built with %i items deleted for missing labels or images' % del_count)
-        return dicom_dict
-
-    def save(self, path_to_save): 
-        ''' DicomDict.save(path_to_save = STR)
-        This dumps the dictionary to a csv file.  Only useful for 
-        troubleshooting
-        '''
-        w = csv.writer(open(os.path.join(path_to_save,'dicom_dict_dump_kds17.csv'),'w'))
-        for key, val in self.dicom_dict.items():
-            w.writerow([key, val])
-        print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
 
 class DicomImage:
     '''DicomImage 
@@ -264,7 +125,7 @@ class ProcessDicomBatch(threading.Thread):
         return
 
     def run(self):
-        #logging.debug('Processing Image')
+        logging.debug('Processing image')
         im = self.DicomImage
         im.image = self.__mask(np.array(im.image,  dtype=np.int16),fill_lung_structures=False)
         spacing = [1,1,1]
