@@ -13,9 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from kds17_pre import *
-from kds17_io import *
-
 import kds17_pre as pre
 import kds17_io as kio
 import numpy as np
