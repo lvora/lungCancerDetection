@@ -18,13 +18,13 @@ import kds17_vis as vis
 
 def main(argv = None):
 # This is the top level folder containing all scan folders
-    im_dir = '/home/charlie/kaggle_stage1' 
+    im_dir = '/home/charlie/kaggle_sample' 
 
 # This is the path to the labels in csv
-    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+    label_dir = '/home/charlie/kaggle_sample/stage1_labels.csv'
 
 # This will be created if it does not exist
-    pickle_dir = '/home/charlie/kaggle_pickle/' 
+    pickle_dir = '/home/charlie/kaggle_pickles/' 
 
 # Creating an IO object with working directories 
 # im_dir and label_dir are not required after
@@ -41,18 +41,18 @@ def main(argv = None):
 # then it will conduct all preprocessing in threads that should not exceed
 # system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
 # am assuming it works.
-    io.build_batch()
+    #io.build_batch()
         
 # This is an example of loading all batches from your pickle_dir into a list of
 # DicomBatch objects
-    z = io.load_batch()
+    z = io.load_batch('batch_0.pkl')
         
 # This is an example of loading an image from the batch attribute within the loaded
 # DicomBatch object
-    im = z[0].batch[0].image
+    im = z.batch[0].image
         
 # Let's look at it!
-    vis.animate(im)
+    vis.animate(vis.rotate(im, 'anterposterior'))
 
 if __name__ == '__main__':
     main()

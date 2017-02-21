@@ -20,9 +20,11 @@ import kds17_pre as pre
 import csv
 import psutil
 import os
+import numpy as np
 from tqdm import tqdm
 import threading as th
 import pickle
+import tensorflow as tf
 
 class DicomDict:
     ''' DicomDict
@@ -165,7 +167,6 @@ class DicomIO:
                     where they should be saved
     Retruns:
         DicomIO.<args>
-        DicomIO.path_exist: Boolean indicating whether the path exists
         DicomIO.list: List containing the names of all files in pickle_dir
 
     '''
@@ -173,15 +174,15 @@ class DicomIO:
         self.label_dir = label_dir
         self.im_dir = im_dir
         self.pickle_dir = pickle_dir
-
+        self.batch_file_list = self.__check_path(arg='batch')
         self.DicomDict = self.__load_dict()
-        self.path_exist = False
-        self.list = self.__check_path()
 
-    def __check_path(self):
+    def __check_path(self, arg=None):
         if os.path.isdir(self.pickle_dir):
-            self.path_exist = True
-            return [f for f in os.listdir(self.pickle_dir) if os.path.isfile(os.path.join(self.pickle_dir, f))] 
+            if arg is None:
+                return [f for f in os.listdir(self.pickle_dir) if os.path.isfile(os.path.join(self.pickle_dir, f))] 
+            else:
+                return [f for f in os.listdir(self.pickle_dir) if arg in f]
         else:
             os.mkdir(self.pickle_dir)
             self.__check_path()
@@ -190,13 +191,12 @@ class DicomIO:
         print('Saving dictionary.pkl in %s' % self.pickle_dir)
         with open(os.path.join(self.pickle_dir,'dictionary.pkl',), 'wb') as f:
             pickle.dump(self.DicomDict,f)
-        self.__check_path()
 
     def __load_dict(self):
         if not self.__check_path():
             return DicomDict(self.im_dir, self.label_dir)
         else:
-            if any('dictionary' in s for s in self.__check_path()):
+            if any(self.__check_path('dictionary')):
                 print('Loading dictionary.pkl from %s' % (self.pickle_dir))
                 with open(os.path.join(self.pickle_dir,'dictionary.pkl',), 'rb') as f:
                     return pickle.load(f)
@@ -212,24 +212,10 @@ class DicomIO:
             pickle.dump(dicomBatch,f)
         self.__check_path()
         
-    def load_batch(self, pickle_name=None): 
-        if pickle_name is not None:
-            print('Loading %s from %s' % (pickle_name, self.pickle_dir))
-            with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
-                return [pickle.load(f)]
-        else:
-            self.__check_path()
-            batch_list = []
-            print('Loading everything from %s' % (self.pickle_dir))
-            filt_list = [k for k in self.list if k is not 'dictionary.pkl']
-            if not filt_list:
-                print('\n!!!!!No batch files here!!!!!\n')
-                raise FileNotFoundError
-            else:
-                for k in filt_list:
-                    with open(os.path.join(self.pickle_dir,k), 'rb')as f:
-                        batch_list.append(pickle.load(f))
-                return batch_list                    
+    def load_batch(self, pickle_name): 
+        print('Loading %s from %s' % (pickle_name, self.pickle_dir))
+        with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
+            return pickle.load(f)
 
     def build_batch(self):
         print('Constructing batches of images and saving them in %s' % self.pickle_dir) 
@@ -246,4 +232,9 @@ class DicomIO:
             self.save_batch(y)
         
 
+
+
+
+
+        
 
