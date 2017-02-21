@@ -16,15 +16,20 @@
 """Visualisation handling of DICOM Images for Kaggle Data Science 2017
 
 """
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib import animation as an
 
 def animate(image):
+    print('Preparing animation')
     fig = plt.figure()
     ims = []
     ax = fig.add_subplot(111)
     for i in range(image.shape[0]):
         im = plt.imshow(image[i], cmap=plt.cm.gray)
         ims.append([im])
-    ani = an.ArtistAnimation(fig, ims, interval=150, blit=True)
+    ani = an.ArtistAnimation(fig, ims, interval=50, blit=True)
+    print('Animating')
     plt.show()
 
 def rotate(image, pos):
