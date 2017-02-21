@@ -257,6 +257,34 @@ class DicomBatch:
             im_batch.append(self.__dicom_images(k))
         return im_batch
 
+class DicomData(object):
+
+    def __init__(self, batch_list):
+        self._images = images
+        self._labels = labels
+        self._epoch = 0
+        self._index = 0
+
+    @property
+    def images(self):
+        return self._images
+
+    @property
+    def labels(self):
+        return self._labels
+
+    @property
+    def num_examples(self):
+        return self._num_examples
+
+    @property
+    def epoch(self):
+        return self._epoch
+    
+    def next_batch(self):
+        start = self._index
+        self._index += 1
+
 class ProcessDicomBatch(threading.Thread):
     def __init__(self,group=None, target=None, name=None, DicomImage=(), verbose=None):
         super().__init__(group=group, target=target, name=name)
