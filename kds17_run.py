@@ -18,10 +18,10 @@ import kds17_vis as vis
 
 def main(argv = None):
 # This is the top level folder containing all scan folders
-    im_dir = '/home/charlie/kaggle_sample' 
+    im_dir = '/home/charlie/kaggle_stage1' 
 
 # This is the path to the labels in csv
-    label_dir = '/home/charlie/kaggle_sample/stage1_labels.csv'
+    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
 
 # This will be created if it does not exist
     pickle_dir = '/home/charlie/kaggle_pickles/' 
@@ -41,7 +41,7 @@ def main(argv = None):
 # then it will conduct all preprocessing in threads that should not exceed
 # system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
 # am assuming it works.
-    #io.build_batch()
+    io.build_batch()
         
 # This is an example of loading all batches from your pickle_dir into a list of
 # DicomBatch objects

@@ -53,8 +53,6 @@ class DicomFeeder(object):
         self.__image_index += 1
         return image, label
 
-
-
     def __next_batch(self, from_eval_set=False):
         if from_eval_set:
             this_set = self.__eval_set
@@ -71,8 +69,8 @@ class DicomFeeder(object):
         image_batch = self.__io.load_batch(
                 this_set[self.__batch_index]).batch
 
-        images = [tf.cast(x.image,dtype = tf.int16) for x in image_batch]
-        labels = [tf.cast(x.label,dtype = tf.int16) for x in image_batch]
+        images = [tf.cast(x.image,dtype = tf.int32) for x in image_batch]
+        labels = [tf.cast(x.label,dtype = tf.int32) for x in image_batch]
 
         combined = list(zip(images, labels))
         np.random.shuffle(combined)
@@ -82,16 +80,28 @@ class DicomFeeder(object):
 
         return images, labels, set_len
     
+def mid_crop(im, size):
+    start = (tf.shape(im)-size)//2
+    end = start+size
+    im_slice = tf.slice(im, [start[0],start[1],start[2]], [size,size,size])
+    return im_slice
+
+def rand_crop(im, size):
+    im_slice = tf.random_crop(im, [size,size,size])
+    return im_slice
+
+def flip(im):
+    dims = tf.cast([3], dtype = tf.int32)
+    im_flip = tf.reverse_v2(im, dims)
+    return im_flip
+
+
 def placeholder_inputs():
-    '''do something
-    '''
     image_placeholder = tf.placeholder(tf.float32, shape=([None, None, None])) 
     label_placeholder = tf.placeholder(tf.int32, shape=(1))
     return image_placeholder, label_placeholder
 
 def fill_feed_dict(feeder, image_pl, label_pl, for_eval=False):
-    '''do something
-    '''
     image_feed, label_feed = feeder.next_image(from_eval_set=for_eval)
     
     feed_dict = {
@@ -102,14 +112,20 @@ def fill_feed_dict(feeder, image_pl, label_pl, for_eval=False):
     return feed_dict 
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_sample' 
-    label_dir = '/home/charlie/kaggle_sample/stage1_labels.csv'
+    im_dir = '/home/charlie/kaggle_stage1' 
+    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
     pickle_dir = '/home/charlie/kaggle_pickles/' 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
+
     feeder = DicomFeeder(io)
+
     image_pl, label_pl = placeholder_inputs()
-    for i in range(1000):
+
+    for i in range(100):
         x = fill_feed_dict(feeder, image_pl, label_pl)
+        cx = rand_crop(x[image_pl], 256)
+        fcx = flip(cx)
+        print(fcx)
 
 
 if __name__ == '__main__':
