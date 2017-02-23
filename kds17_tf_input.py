@@ -103,7 +103,7 @@ class DicomFeeder(object):
     def __mid_crop(self, im):
         start = (tf.shape(im)-IMAGE_SIZE)//2
         end = start+IMAGE_SIZE
-        im_slice = tf.slice(im, [1, start[0], start[1], start[0]],[1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
+        im_slice = tf.slice(im, [1, start[0], start[1], start[2]],[1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
         return im_slice
 
     def __rand_transpose(self, im):
