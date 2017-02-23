@@ -19,6 +19,7 @@ import numpy as np
 
 # Global Variables
 IMAGE_SIZE = 256
+
 class DicomFeeder(object):
     def __init__(self, DicomIO):
         self.__batch_index = 0
@@ -111,37 +112,18 @@ class DicomFeeder(object):
         im_trans = tf.transpose(im, perm=perm)
         return im_trans
 
-def placeholder_inputs(batch_size):
-    image_placeholder = tf.placeholder(tf.float32, shape=([batch_size, None, None, None])) 
-    label_placeholder = tf.placeholder(tf.int32, shape=(batch_size, ))
-    return image_placeholder, label_placeholder
+#def placeholder_inputs(batch_size):
+#    image_placeholder = tf.placeholder(tf.float32, shape=([batch_size, None, None, None])) 
+#    label_placeholder = tf.placeholder(tf.int32, shape=(batch_size, ))
+#    return image_placeholder, label_placeholder
+#
+#def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval=False):
+#    image_feed, label_feed = feeder.next_batch(batch_size, from_eval_set=for_eval)
+#    
+#    feed_dict = {
+#            image_pl: image_feed,
+#            label_pl: label_feed,
+#            }
+#
+#    return feed_dict 
 
-def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval=False):
-    image_feed, label_feed = feeder.next_batch(batch_size, from_eval_set=for_eval)
-    
-    feed_dict = {
-            image_pl: image_feed,
-            label_pl: label_feed,
-            }
-
-    return feed_dict 
-
-def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data' 
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickle/' 
-
-    io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
-    feeder = DicomFeeder(io)
-    image_pl, label_pl = placeholder_inputs()
-
-    for i in range(10):
-        x = fill_feed_dict(feeder, image_pl, label_pl)
-        print(x[image_pl])
-
-    for i in range(10):
-        x = fill_feed_dict(feeder, image_pl, label_pl, for_eval=True)
-        print(x[image_pl])
-
-if __name__ == '__main__':
-    main()

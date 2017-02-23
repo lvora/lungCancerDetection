@@ -13,30 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 
-import kds17_tf_input as tf_input
-import tensorflow as tf
-import numpy as np
+import kds17_tf_model as tf_model
+import kds17_io as kio
 
-def train():
-    with tf.Graph().as_default():
-        image_pl, label_pl = placeholder_inputs()
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data' 
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickle/' 
+    im_dir = '/home/charlie/kaggle_stage1' 
+    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+    pickle_dir = '/home/charlie/kaggle_pickles/' 
 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
-    feeder = DicomFeeder(io)
-    image_pl, label_pl = placeholder_inputs()
-
-    for i in range(10):
-        x = fill_feed_dict(feeder, image_pl, label_pl)
-        print(x[image_pl])
-
-    for i in range(10):
-        x = fill_feed_dict(feeder, image_pl, label_pl, for_eval=True)
-        print(x[image_pl])
+    tf_model.run_train(io)
 
 if __name__ == '__main__':
     main()

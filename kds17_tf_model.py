@@ -23,6 +23,7 @@ import kds17_io as kio
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
 BATCH_SIZE = 1
+MAX_STEPS = 1000000
 MOVING_AVERAGE_DECAY = 0.9999     
 NUM_EPOCHS_PER_DECAY = 350.0      
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 16
@@ -142,9 +143,32 @@ def train(total_loss, global_step):
 
     return train_op
 
+def run_train(DicomIO, max_steps = 10, batch_size = 1):
+    with tf.Graph().as_default():
+        global_step = tf.Variable(0, trainable=False)
+        feeder = tf_input.DicomFeeder(DicomIO)
+        images, labels = feeder.next_batch(batch_size)
+        logits = inference(images)
+        losss = loss(logits, labels)
+        train_op = train(losss, global_step)
+        summary_op = tf.summary.merge_all()
+        init = tf.global_variables_initializer()
+        session_config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
+        session_config.gpu_options.per_process_gpu_memory_fraction = 0.70
+        sess = tf.Session(config=session_config)
+        sess.run(init)
+        tf.train.start_queue_runners(sess=sess)
+        start_step = 0
+        for step in xrange(start_step, start_step+max_steps):
+            start_time = time.time()
+            _, loss_value = sess.run([train_op, losss])
+            duration = time.time() - start_time
+            print('Duration: %.3f Loss: %.3f' % (duration,loss_value))
+            assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_sample'
-    label_dir = '/home/charlie/kaggle_sample/stage1_labels.csv'
+    im_dir = '/home/charlie/kaggle_stage1'
+    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
     pickle_dir = '/home/charlie/kaggle_pickles/'
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
@@ -162,7 +186,7 @@ def main(argv = None):
         sess.run(init)
         tf.train.start_queue_runners(sess=sess)
         start_step = 0
-        for step in xrange(start_step, start_step+100):
+        for step in xrange(start_step, start_step+MAX_STEPS):
             start_time = time.time()
             _, loss_value = sess.run([train_op, losss])
             duration = time.time() - start_time
