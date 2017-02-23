@@ -21,8 +21,6 @@ def train():
     with tf.Graph().as_default():
         image_pl, label_pl = placeholder_inputs()
 
-
-
 def main(argv = None):
     im_dir = '/home/charlie/kaggle_data' 
     label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'

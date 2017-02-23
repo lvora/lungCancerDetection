@@ -37,7 +37,17 @@ class DicomFeeder(object):
         eval_set = self.__batch_file_list[train_idx:]
         return train_set, eval_set 
 
-    def next_image(self, from_eval_set=False):
+    def next_batch(self, batch_size, from_eval_set=False):
+        image, label = self.__next_image(from_eval_set=from_eval_set)
+        image_batch = image
+        label_batch = label
+        for i in range(batch_size-1):
+            image, label = self.__next_image(from_eval_set=from_eval_set)
+            image_batch = tf.concat(0,[image_batch, image])
+            label_batch = tf.concat(0,[label_batch, label])
+        return image_batch, label_batch
+
+    def __next_image(self, from_eval_set=False):
         if from_eval_set and not self.__eval:
             self.__images, self.__labels, self.__set_len = self.__next_batch(
                     from_eval_set=from_eval_set)
@@ -48,8 +58,9 @@ class DicomFeeder(object):
                     from_eval_set=from_eval_set)
             self.__image_index = 0
 
-        image = self.__images[self.__image_index]
-        label = self.__labels[self.__image_index]
+        image = tf.image.per_image_standardization(self.__images[self.__image_index])
+        image = tf.expand_dims(image,0)
+        label = tf.expand_dims(self.__labels[self.__image_index],0)
 
         self.__image_index += 1
         if from_eval_set:
@@ -73,8 +84,8 @@ class DicomFeeder(object):
         image_batch = self.__io.load_batch(
                 this_set[self.__batch_index]).batch
 
-        images = [tf.cast(x.image,dtype = tf.int32) for x in image_batch]
-        labels = [tf.cast(x.label,dtype = tf.int32) for x in image_batch]
+        images = [tf.cast(x.image,dtype = tf.float32) for x in image_batch]
+        labels = [tf.cast(int(x.label),dtype = tf.int32) for x in image_batch]
 
         combined = list(zip(images, labels))
         np.random.shuffle(combined)
@@ -85,27 +96,28 @@ class DicomFeeder(object):
         return images, labels, set_len
 
     def __rand_crop(self, im):
-        im_slice = tf.random_crop(im, [IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
+        im_slice = tf.random_crop(im, [1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
         return im_slice
 
     def __mid_crop(self, im):
         start = (tf.shape(im)-IMAGE_SIZE)//2
         end = start+IMAGE_SIZE
-        im_slice = tf.slice(im, [start[0], start[1], start[0]],[IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
+        im_slice = tf.slice(im, [1, start[0], start[1], start[0]],[1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
         return im_slice
 
     def __rand_transpose(self, im):
-        perm = np.random.permutation(3)
+        last_3 = np.random.permutation(3)+1
+        perm = np.append(0,last_3)
         im_trans = tf.transpose(im, perm=perm)
         return im_trans
 
-def placeholder_inputs():
-    image_placeholder = tf.placeholder(tf.float32, shape=([None, None, None])) 
-    label_placeholder = tf.placeholder(tf.int32, shape=(1))
+def placeholder_inputs(batch_size):
+    image_placeholder = tf.placeholder(tf.float32, shape=([batch_size, None, None, None])) 
+    label_placeholder = tf.placeholder(tf.int32, shape=(batch_size, ))
     return image_placeholder, label_placeholder
 
-def fill_feed_dict(feeder, image_pl, label_pl, for_eval=False):
-    image_feed, label_feed = feeder.next_image(from_eval_set=for_eval)
+def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval=False):
+    image_feed, label_feed = feeder.next_batch(batch_size, from_eval_set=for_eval)
     
     feed_dict = {
             image_pl: image_feed,
