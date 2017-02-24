@@ -22,11 +22,11 @@ import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
-BATCH_SIZE = 1
+BATCH_SIZE = 3
 MAX_STEPS = 1000000
 MOVING_AVERAGE_DECAY = 0.9999     
 NUM_EPOCHS_PER_DECAY = 350.0      
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 16
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
 LEARNING_RATE_DECAY_FACTOR = 1e-07  
 INITIAL_LEARNING_RATE = 5e-07       
 FILTER_SIZE = 16 
@@ -99,7 +99,7 @@ def loss(logits, labels):
     tf.add_to_collection('losses', cross_entropy_mean)
     return tf.add_n(tf.get_collection('losses'), name='total_loss')
 
-def _add_loss_summaries(total_loss):
+def __add_loss_summaries(total_loss):
     loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
     losses = tf.get_collection('losses')
     loss_averages_op = loss_averages.apply(losses + [total_loss])
@@ -119,7 +119,7 @@ def train(total_loss, global_step):
                                   staircase=True)
     tf.summary.scalar('learning_rate', lr)
 
-    loss_averages_op = _add_loss_summaries(total_loss)
+    loss_averages_op = __add_loss_summaries(total_loss)
 
     with tf.control_dependencies([loss_averages_op]):
         opt = tf.train.GradientDescentOptimizer(lr)
@@ -143,11 +143,11 @@ def train(total_loss, global_step):
 
     return train_op
 
-def run_train(DicomIO, max_steps = 10, batch_size = 1):
+def run_train(DicomIO, max_steps = 10):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
         feeder = tf_input.DicomFeeder(DicomIO)
-        images, labels = feeder.next_batch(batch_size)
+        images, labels = feeder.next_batch(BATCH_SIZE)
         logits = inference(images)
         losss = loss(logits, labels)
         train_op = train(losss, global_step)
