@@ -19,6 +19,7 @@ import numpy as np
 
 # Global Variables
 IMAGE_SIZE = 256
+num_threads = 4
 
 class DicomFeeder(object):
     def __init__(self, DicomIO):
@@ -40,13 +41,18 @@ class DicomFeeder(object):
 
     def next_batch(self, batch_size, from_eval_set=False):
         image, label = self.__next_image(from_eval_set=from_eval_set)
-        image_batch = image
-        label_batch = label
-        for i in range(batch_size-1):
-            image, label = self.__next_image(from_eval_set=from_eval_set)
-            image_batch = tf.concat(0,[image_batch, image])
-            label_batch = tf.concat(0,[label_batch, label])
-        return image_batch, label_batch
+        image_batch, label_batch = tf.train.shuffle_batch([image, label], batch_size=batch_size, num_threads=num_threads, capacity=4+3*batch_size, min_after_dequeue=4)
+        return image_batch, tf.reshape(label_batch, [batch_size])
+
+    #def next_batch(self, batch_size, from_eval_set=False):
+    #    image, label = self.__next_image(from_eval_set=from_eval_set)
+    #    image_batch = image
+    #    label_batch = label
+    #    for i in range(batch_size-1):
+    #        image, label = self.__next_image(from_eval_set=from_eval_set)
+    #        image_batch = tf.concat(0,[image_batch, image])
+    #        label_batch = tf.concat(0,[label_batch, label])
+    #    return image_batch, label_batch
 
     def __next_image(self, from_eval_set=False):
         if from_eval_set and not self.__eval:
@@ -60,8 +66,9 @@ class DicomFeeder(object):
             self.__image_index = 0
 
         image = tf.image.per_image_standardization(self.__images[self.__image_index])
-        image = tf.expand_dims(image,0)
-        label = tf.expand_dims(self.__labels[self.__image_index],0)
+        image = tf.expand_dims(image,-1)
+        #label = tf.expand_dims(self.__labels[self.__image_index],0)
+        label = self.__labels[self.__image_index]
 
         self.__image_index += 1
         if from_eval_set:
@@ -97,18 +104,19 @@ class DicomFeeder(object):
         return images, labels, set_len
 
     def __rand_crop(self, im):
-        im_slice = tf.random_crop(im, [1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
+        im_slice = tf.random_crop(im, [IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE, 1])
         return im_slice
 
     def __mid_crop(self, im):
         start = (tf.shape(im)-IMAGE_SIZE)//2
         end = start+IMAGE_SIZE
-        im_slice = tf.slice(im, [1, start[0], start[1], start[2]],[1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
+        im_slice = tf.slice(im, [start[0], start[1], start[2]],[1, IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE])
         return im_slice
 
     def __rand_transpose(self, im):
-        last_3 = np.random.permutation(3)+1
-        perm = np.append(0,last_3)
+        first_3 = np.random.permutation(3)
+        perm = np.append(first_3,3)
+        #perm = np.random.permutation(3)
         im_trans = tf.transpose(im, perm=perm)
         return im_trans
 

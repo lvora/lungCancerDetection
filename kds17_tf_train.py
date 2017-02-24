@@ -24,6 +24,7 @@ def main(argv = None):
 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
     tf_model.run_train(io, 10000)
+    #tf_model.run_test(io, 10)
 
 if __name__ == '__main__':
     main()

@@ -22,15 +22,17 @@ import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
-BATCH_SIZE = 3
+BATCH_SIZE = 1
 MAX_STEPS = 1000000
 MOVING_AVERAGE_DECAY = 0.9999     
 NUM_EPOCHS_PER_DECAY = 350.0      
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
 LEARNING_RATE_DECAY_FACTOR = 1e-07  
 INITIAL_LEARNING_RATE = 5e-07       
-FILTER_SIZE = 16 
-CHANNEL_SIZE = 1
+FILTER_SIZE = 8 
+IN_CHANNEL = 1
+OUT_CHANNEL = 1
+DTYPE = tf.float32
 
 def __activation_summary(x):
    tensor_name = x.op.name
@@ -42,57 +44,68 @@ def __var_on_cpu_mem(name, shape, initializer=None, dtype=tf.float32):
         return tf.get_variable(name,shape,initializer=initializer,dtype=dtype)
 
 def inference(images):
-    with tf.variable_scope('conv1') as scope:
-        kernel = __var_on_cpu_mem('weights', 
-                        [FILTER_SIZE,FILTER_SIZE,IMAGE_SIZE,CHANNEL_SIZE], 
-                        initializer=tf.truncated_normal_initializer(
-                            stddev=5e-2,
-                            dtype=tf.float32), dtype=tf.float32)
-        conv = tf.nn.depthwise_conv2d(images, kernel, [1,1,1,1], padding='SAME')
-        biases = __var_on_cpu_mem('biases',
-                        [IMAGE_SIZE*CHANNEL_SIZE],
-                        initializer=tf.constant_initializer(0.0), dtype=tf.float32)
-        pre_activation = tf.nn.bias_add(conv,biases)
-        conv1 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
-    norm1 = tf.nn.lrn(conv1, BATCH_SIZE, bias=1.0, alpha=0.001 / 16.0, 
-                        beta=0.75, name='norm1')
-    pool1 = tf.nn.max_pool(norm1, ksize=[1,3,3,1], strides=[1,2,2,1],
-                            padding='SAME', name='pool1')
-
-    with tf.variable_scope('local2') as scope:
-        reshape = tf.reshape(pool1, [BATCH_SIZE, -1])
-        dim = reshape.get_shape()[1].value
-        weights = __var_on_cpu_mem('weights', [dim, 16], dtype=tf.float32)
-        biases = __var_on_cpu_mem('biases', 
-                        [16], 
-                        initializer=tf.constant_initializer(0.1),
-                        dtype=tf.float32)
-        local2 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
-        __activation_summary(local2)
-
-    with tf.variable_scope('local3') as scope:
-        weights = __var_on_cpu_mem('weights', [16, 8], dtype=tf.float32)
-        biases = __var_on_cpu_mem('biases', 
-                        [8], 
-                        initializer=tf.constant_initializer(0.1), 
-                        dtype=tf.float32)
-        local3 = tf.nn.relu(tf.matmul(local2, weights) + biases, name=scope.name)
-        __activation_summary(local3)
-
-    with tf.variable_scope('softmax_linear') as scope:
-        weights = __var_on_cpu_mem('weights', [8, NUM_CLASSES], dtype=tf.float32)
+    im_q = __partition(images)
+    with tf.variable_scope('sum_softmax_linear') as scope:
+        weights = __var_on_cpu_mem('weights', [8, NUM_CLASSES])
         biases = __var_on_cpu_mem('biases', 
                         [NUM_CLASSES], 
-                        initializer=tf.constant_initializer(0.0), 
-                        dtype = tf.float32)
+                        initializer=tf.constant_initializer(0.0))
         softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
         __activation_summary(softmax_linear)
+    for ims in im_q:
+        with tf.variable_scope('conv1') as scope:
+            kernel = __var_on_cpu_mem('weights', 
+                            [FILTER_SIZE,FILTER_SIZE,FILTER_SIZE,IN_CHANNEL, OUT_CHANNEL], 
+                            initializer=tf.truncated_normal_initializer(
+                                stddev=5e-2,
+                                dtype=DTYPE))
+            conv = tf.nn.conv3d(ims, kernel, [1,1,1,1,1], padding='SAME')
+            biases = __var_on_cpu_mem('biases',
+                            [IN_CHANNEL*OUT_CHANNEL],
+                            initializer=tf.constant_initializer(0.0))
+            pre_activation = tf.nn.bias_add(conv,biases)
+            conv1 = tf.nn.relu(pre_activation, name=scope.name)
+            __activation_summary(conv1)
+
+        pool1 = tf.nn.max_pool3d(conv1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1],
+                                padding='SAME', name='pool1')
+
+        in_channel_squeeze = tf.squeeze(pool1, [4])
+
+        norm1 = tf.nn.lrn(in_channel_squeeze, BATCH_SIZE, bias=1.0, alpha=0.001 / 16.0, 
+                            beta=0.75, name='norm1')
+
+        with tf.variable_scope('local2') as scope:
+            reshape = tf.reshape(pool1, [BATCH_SIZE, -1])
+            dim = reshape.get_shape()[1].value
+            weights = __var_on_cpu_mem('weights', [dim, 16])
+            biases = __var_on_cpu_mem('biases', 
+                            [16], 
+                            initializer=tf.constant_initializer(0.1))
+            local2 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
+            __activation_summary(local2)
+
+        with tf.variable_scope('local3') as scope:
+            weights = __var_on_cpu_mem('weights', [16, 8])
+            biases = __var_on_cpu_mem('biases', 
+                            [8], 
+                            initializer=tf.constant_initializer(0.1), 
+                            dtype=DTYPE)
+            local3 = tf.nn.relu(tf.matmul(local2, weights) + biases, name=scope.name)
+            __activation_summary(local3)
+
+        with tf.variable_scope('softmax_linear') as scope:
+            weights = __var_on_cpu_mem('weights', [8, NUM_CLASSES])
+            biases = __var_on_cpu_mem('biases', 
+                            [NUM_CLASSES], 
+                            initializer=tf.constant_initializer(0.0))
+            softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
+            __activation_summary(softmax_linear)
 
     return softmax_linear
 
 def loss(logits, labels):
-    labels = tf.cast(labels, tf.int64)
+    labels = tf.cast(labels, tf.int32)
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits, labels, name='cross_entropy_per_example')
     cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
@@ -154,7 +167,7 @@ def run_train(DicomIO, max_steps = 10):
         summary_op = tf.summary.merge_all()
         init = tf.global_variables_initializer()
         session_config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
-        session_config.gpu_options.per_process_gpu_memory_fraction = 0.70
+        session_config.gpu_options.allocator_type = 'BFC'
         sess = tf.Session(config=session_config)
         sess.run(init)
         tf.train.start_queue_runners(sess=sess)
@@ -166,32 +179,30 @@ def run_train(DicomIO, max_steps = 10):
             print('Duration: %.3f Loss: %.3f' % (duration,loss_value))
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
-def main(argv = None):
-    im_dir = '/home/charlie/kaggle_stage1'
-    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickles/'
+def __partition(im):
+    im_q = []
+    x0, x1 = tf.split(1, 2, im)
+    for x in [x0, x1]:
+        y0, y1 = tf.split(2, 2, x)
+        for y in [y0, y1]:
+            z0, z1 = tf.split(3, 2, y)
+            im_q.append(z0)
+            im_q.append(z1)
+    return im_q
+
+def run_test(DicomIO, max_steps = 10):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
-        io = kio.DicomIO(pickle_dir, im_dir, label_dir)
-        feeder = tf_input.DicomFeeder(io)
+        feeder = tf_input.DicomFeeder(DicomIO)
         images, labels = feeder.next_batch(BATCH_SIZE)
-        logits = inference(images)
-        losss = loss(logits, labels)
-        train_op = train(losss, global_step)
-        summary_op = tf.summary.merge_all()
         init = tf.global_variables_initializer()
         session_config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
         session_config.gpu_options.per_process_gpu_memory_fraction = 0.70
         sess = tf.Session(config=session_config)
         sess.run(init)
-        tf.train.start_queue_runners(sess=sess)
-        start_step = 0
-        for step in xrange(start_step, start_step+MAX_STEPS):
-            start_time = time.time()
-            _, loss_value = sess.run([train_op, losss])
-            duration = time.time() - start_time
-            print('Duration: %.3f Loss: %.3f' % (duration,loss_value))
-            assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+        partition = sess.run([part])
+        
+        
+        for im in partition:
+            print(im.get_shape())
 
-if __name__ == '__main__':
-    main()
