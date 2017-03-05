@@ -20,11 +20,9 @@ import kds17_pre as pre
 import csv
 import psutil
 import os
-import numpy as np
 from tqdm import tqdm
-import threading as th
 import pickle
-import tensorflow as tf
+
 
 class DicomDict:
     ''' DicomDict
@@ -33,8 +31,10 @@ class DicomDict:
     checking
 
     Args:
-        path_to_images: Str of valid path to folder containing top level folders
-        path_to_labels: Str of valid path to csv file containing ids and labels
+        path_to_images: Str of valid path to folder containing top 
+                        level folders
+        path_to_labels: Str of valid path to csv file containing ids 
+                        and labels
 
     Retruns:
         DicomDict.<args>
@@ -61,11 +61,13 @@ class DicomDict:
         self.path_to_labels = self.__check_path(path_to_labels)
         self.dicom_dict = self.__build_dict()
         self.total_size = self.__total_size()
-        self.job_args = [(os.path.join(self.path_to_images,k), 
-            list(j for i, j in v.items() if i == 'cancer')[0], 
-            k) for k, v in self.dicom_dict.items()]
+        self.job_args = [(os.path.join(self.path_to_images, k), 
+                         list(j for i, j in v.items() if i == 'cancer')[0], k) 
+                         for k, v in self.dicom_dict.items()]
         self.batch_size_limit = self.__batch_limiter()
-        self.batched_job_args = [self.job_args[i:i+self.batch_size_limit] for i in range(0,len(self.job_args), self.batch_size_limit)]
+        self.batched_job_args = [self.job_args[i:i+self.batch_size_limit] 
+                                 for i in range(0, len(self.job_args), 
+                                 self.batch_size_limit)]
         
     def __check_path(self, path):
         if os.path.isfile(path):
@@ -75,7 +77,6 @@ class DicomDict:
                 return path
             else:
                 raise ValueError('There was nothing in %s' % path)
-
 
     def __batch_limiter(self):
         mem = psutil.virtual_memory()
@@ -99,7 +100,6 @@ class DicomDict:
         dicom_dict = dict()
         try:
             for root, dirs, files in tqdm(os.walk(self.path_to_images)):
-                path = root.split(os.sep)
                 top_id = os.path.basename(root)
                 if len(files) > 0:
                     dicom_dict[top_id] = {}
@@ -107,19 +107,20 @@ class DicomDict:
                     dicom_dict[top_id]['size'] = 0
                     for f in files:
                         try:
-                            dicom_dict[top_id]['size'] += os.path.getsize(os.path.join(root, f))
+                            dicom_dict[top_id]['size'] += os.path.getsize(
+                                                         os.path.join(root, f))
                         except FileNotFoundError:
                             continue
         except:
             raise ValueError('Dictionary Failed')
         return self.__assign_labels(dicom_dict)
 
-    def __assign_labels(self,dicom_dict):
+    def __assign_labels(self, dicom_dict):
         print('Assigning labels')
         try:
             with open(self.path_to_labels) as cf:
                 try:
-                    reader = csv.DictReader(cf,delimiter=',')
+                    reader = csv.DictReader(cf, delimiter=',')
                 except:
                     raise FileNotFoundError('label file not found')
 
@@ -128,7 +129,6 @@ class DicomDict:
                         dicom_dict['%s' % row['id']]['cancer'] = row['cancer']
                     except:
                         pass
-                        #print('%s image does not exist' % row['id'])
         except KeyError:
             pass
         except:
@@ -140,12 +140,13 @@ class DicomDict:
         del_count = 0
         for x in list(dicom_dict.keys()):
             for y in list(dicom_dict[x].keys()):
-                if x in dicom_dict.keys() and 'cancer' not in dicom_dict[x].keys():
-                    #print(x)
-                    #print(dicom_dict[x].keys())
+                if (x in dicom_dict.keys() and 'cancer' 
+                        not in dicom_dict[x].keys()):
+
                     del_count += 1
                     del dicom_dict[x]
-        print('Dictionary Built with %i items deleted for missing labels or images' % del_count)
+        print(('Dictionary Built with %i items deleted for missing' 
+               'labels or images') % del_count)
         return dicom_dict
 
     def save(self, path_to_save): 
@@ -153,10 +154,12 @@ class DicomDict:
         This dumps the dictionary to a csv file.  Only useful for 
         troubleshooting
         '''
-        w = csv.writer(open(os.path.join(path_to_save,'dicom_dict_dump_kds17.csv'),'w'))
+        w = csv.writer(open(os.path.join(path_to_save, 
+                            'dicom_dict_dump_kds17.csv'), 'w'))
         for key, val in self.dicom_dict.items():
             w.writerow([key, val])
         print('dicom_dict_dump_kds17.csv has been saved in %s' % path_to_save)
+
 
 class DicomIO:
     ''' DicomIO
@@ -180,7 +183,8 @@ class DicomIO:
     def __check_path(self, arg=None):
         if os.path.isdir(self.pickle_dir):
             if arg is None:
-                return [f for f in os.listdir(self.pickle_dir) if os.path.isfile(os.path.join(self.pickle_dir, f))] 
+                return [f for f in os.listdir(self.pickle_dir) 
+                        if os.path.isfile(os.path.join(self.pickle_dir, f))] 
             else:
                 return [f for f in os.listdir(self.pickle_dir) if arg in f]
         else:
@@ -189,8 +193,8 @@ class DicomIO:
 
     def save_dict(self):
         print('Saving dictionary.pkl in %s' % self.pickle_dir)
-        with open(os.path.join(self.pickle_dir,'dictionary.pkl',), 'wb') as f:
-            pickle.dump(self.DicomDict,f)
+        with open(os.path.join(self.pickle_dir, 'dictionary.pkl',), 'wb') as f:
+            pickle.dump(self.DicomDict, f)
 
     def __load_dict(self):
         if not self.__check_path():
@@ -198,35 +202,38 @@ class DicomIO:
         else:
             if any(self.__check_path('dictionary')):
                 print('Loading dictionary.pkl from %s' % (self.pickle_dir))
-                with open(os.path.join(self.pickle_dir,'dictionary.pkl',), 'rb') as f:
+                with open(os.path.join(self.pickle_dir, 'dictionary.pkl'), 
+                          'rb') as f:
                     return pickle.load(f)
             else:
-                if self.im_dir == None or self.label_dir == None:
+                if self.im_dir is None or self.label_dir is None:
                     print('You need to assign an im_dir and label_dir')
                 else:
                     print('Dead end??')
 
     def save_batch(self, dicomBatch): 
         print('Saving %s in %s' % (dicomBatch.name, self.pickle_dir))
-        with open(os.path.join(self.pickle_dir,dicomBatch.name+'.pkl',), 'wb')as f:
-            pickle.dump(dicomBatch,f)
+        with open(os.path.join(self.pickle_dir, 
+                               dicomBatch.name+'.pkl',), 'wb')as f:
+            pickle.dump(dicomBatch, f)
         self.__check_path()
         
     def load_batch(self, pickle_name): 
         print('Loading %s from %s' % (pickle_name, self.pickle_dir))
-        with open(os.path.join(self.pickle_dir,pickle_name), 'rb')as f:
+        with open(os.path.join(self.pickle_dir, pickle_name), 'rb')as f:
             return pickle.load(f)
 
     def build_batch(self):
-        print('Constructing batches of images and saving them in %s' % self.pickle_dir) 
-        for i,args in enumerate(tqdm(self.DicomDict.batched_job_args)):
-            y = pre.DicomBatch(args, 'batch_%i'% i)
+        print('Constructing batches of images and saving them in %s' 
+              % self.pickle_dir) 
+        for i, args in enumerate(tqdm(self.DicomDict.batched_job_args)):
+            y = pre.DicomBatch(args, 'batch_%i' % i)
             threads = []
             for im in y.batch:
                 t = pre.ProcessDicomBatch(DicomImage=im)
                 t.setDaemon(True)
                 threads.append(t)
-            print('\nPreprocessing images for batch_%i\n'% i)
+            print('\nPreprocessing images for batch_%i\n' % i)
             [t.start() for t in threads]
             [t.join() for t in threads]
             self.save_batch(y)

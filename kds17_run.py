@@ -15,6 +15,9 @@
 
 import kds17_io as kio
 import kds17_vis as vis
+import numpy as np
+from matplotlib import pyplot as plt
+
 
 def main(argv = None):
 # This is the top level folder containing all scan folders
@@ -32,16 +35,16 @@ def main(argv = None):
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
 
 # This will save a dictionary.pkl in your pickle_dir
-    io.save_dict()
+#    io.save_dict()
 
 # This is demonstrating accessing an attribute from the DicomDict object
-    print(io.DicomDict.batch_size_limit)
+#    print(io.DicomDict.batch_size_limit)
 
 # This will queue all valid image/label pairs in batches that are <= batch_size_limit
 # then it will conduct all preprocessing in threads that should not exceed
 # system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
 # am assuming it works.
-    io.build_batch()
+#    io.build_batch()
         
 # This is an example of loading all batches from your pickle_dir into a list of
 # DicomBatch objects
@@ -50,9 +53,12 @@ def main(argv = None):
 # This is an example of loading an image from the batch attribute within the loaded
 # DicomBatch object
     im = z.batch[0].image
+    plt.hist(im.ravel(), 2000)
+    plt.gca().set_yscale('log')
+    plt.show()
         
 # Let's look at it!
-    vis.animate(vis.rotate(im, 'anterposterior'))
+#    vis.animate(vis.rotate(im, 'anterposterior'))
 
 if __name__ == '__main__':
     main()
