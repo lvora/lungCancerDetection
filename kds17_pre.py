@@ -17,21 +17,21 @@
 
 """
 from __future__ import division
-import psutil
 import dicom
-import csv
 import os
 from scipy import ndimage as nd
+from skimage import measure
 from tqdm import tqdm
 import numpy as np
-from skimage import measure, morphology
 import threading
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format='[%(threadName)-9s] %(message)s',)
+logging.basicConfig(level=logging.DEBUG,
+                    format='[%(threadName)-9s] %(message)s',)
+
 
 class DicomImage:
-    '''DicomImage 
+    '''DicomImage
     This object stores the id, label, and an np.array of the CT scan.
 
     Args:
@@ -43,7 +43,7 @@ class DicomImage:
         An object containing:
 
         DicomImage.scan: np.array of scan
-        DicomImage.spacing: 3x1 array of spacing adjustment on 
+        DicomImage.spacing: 3x1 array of spacing adjustment on
                             image to normalize to 1mm^3
         DicomImage.<Args>
 
@@ -69,21 +69,27 @@ class DicomImage:
         return image
 
     def __load_scan(self):
-        slices = [dicom.read_file(self.path_to_image + '/' + s) for s in os.listdir(self.path_to_image)]
-        slices.sort(key = lambda x: int(x.ImagePositionPatient[2]))
+        slices = [dicom.read_file(self.path_to_image + '/' + s)
+                  for s in os.listdir(self.path_to_image)]
+        slices.sort(key=lambda x: int(x.ImagePositionPatient[2]))
         try:
-            slice_thickness = np.abs(slices[0].ImagePositionPatient[2]-slices[1].ImagePositionPatient[2])
+            slice_thickness = np.abs(slices[0].ImagePositionPatient[2]
+                                     - slices[1].ImagePositionPatient[2])
         except:
-            slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
+            slice_thickness = np.abs(slices[0].SliceLocation
+                                     - slices[1].SliceLocation)
         for s in slices:
             s.SliceThickness = slice_thickness
 
-        spacing = np.array([slices[0].SliceThickness] +  slices[0].PixelSpacing, dtype=np.float32)
+        spacing = np.array([slices[0].SliceThickness]
+                           + slices[0].PixelSpacing, dtype=np.float32)
         return self.__rescale(slices), spacing
 
+
 class DicomBatch:
-    '''DicomBatch 
-    This object stores a list of DicomImage objects and performs batch processing
+    '''DicomBatch
+    This object stores a list of DicomImage objects and performs batch
+    processing.
 
     Args:
         DicomDict:
@@ -95,10 +101,10 @@ class DicomBatch:
     Returns:
         An object containing:
 
-        DicomBatch.job_args: 
-        DicomBatch.total_samples: 
-        DicomBatch.spacing: 
-        DicomBatch.batch: 
+        DicomBatch.job_args:
+        DicomBatch.total_samples:
+        DicomBatch.spacing:
+        DicomBatch.batch:
         DicomBatch.<Args>
     '''
 
@@ -107,7 +113,7 @@ class DicomBatch:
         self.job_args = job_args
         self.total_samples = len(self.job_args)
         self.batch = self.__load_batch_of_dicomImages()
-        
+
     def __dicom_images(self, job_args):
         return DicomImage(*job_args)
 
@@ -118,8 +124,10 @@ class DicomBatch:
             im_batch.append(self.__dicom_images(k))
         return im_batch
 
+
 class ProcessDicomBatch(threading.Thread):
-    def __init__(self,group=None, target=None, name=None, DicomImage=(), verbose=None):
+    def __init__(self, group=None, target=None, name=None, DicomImage=(),
+                 verbose=None):
         super().__init__(group=group, target=target, name=name)
         self.DicomImage = DicomImage
         return
@@ -127,14 +135,17 @@ class ProcessDicomBatch(threading.Thread):
     def run(self):
         logging.debug('Processing image')
         im = self.DicomImage
-        im.image = self.__mask(np.array(im.image,  dtype=np.int16),fill_lung_structures=False)
-        spacing = [1,1,1]
+        im.image = self.__mask(np.array(im.image,  dtype=np.int16),
+                               fill_lung_structures=False)
+        spacing = [1, 1, 1]
         resize_factor = im.spacing / spacing
-        real_resize_factor = np.round(im.image.shape * resize_factor) / im.image.shape
+        real_resize_factor = np.round(im.image.shape
+                                      * resize_factor) / im.image.shape
         im.spacing = im.spacing / real_resize_factor
-        im.image = nd.interpolation.zoom(im.image, real_resize_factor, mode='nearest') 
+        im.image = nd.interpolation.zoom(im.image, real_resize_factor,
+                                         mode='nearest')
 
-    def __largest_label_volume(self,im, bg=-1):
+    def __largest_label_volume(self, im, bg=-1):
         vals, counts = np.unique(im, return_counts=True)
         counts = counts[vals != bg]
         vals = vals[vals != bg]
@@ -143,13 +154,13 @@ class ProcessDicomBatch(threading.Thread):
         else:
             return None
 
-    def __mask(self,image, fill_lung_structures=True):
+    def __mask(self, image, fill_lung_structures=True):
         binary_image = np.array(image > -320, dtype=np.int8)+1
         labels = measure.label(binary_image)
         bbr = np.array(labels.shape)-1
-        top = labels[bbr[0],bbr[1],bbr[2]]
-        mid = labels[0,bbr[1],bbr[2]]
-        bot = labels[0,0,0]
+        top = labels[bbr[0], bbr[1], bbr[2]]
+        mid = labels[0, bbr[1], bbr[2]]
+        bot = labels[0, 0, 0]
 
         background_label = (top+mid+bot)/3
 
@@ -161,15 +172,15 @@ class ProcessDicomBatch(threading.Thread):
                 labeling = measure.label(axial_slice)
                 l_max = self.__largest_label_volume(labeling, bg=0)
 
-                if l_max is not None: #This slice contains some lung
+                if l_max is not None:
                     binary_image[i][labeling != l_max] = 1
 
-        binary_image -= 1 #Make the image actual binary
-        binary_image = 1-binary_image # Invert it, lungs are now 1
+        binary_image -= 1
+        binary_image = 1-binary_image
 
         labels = measure.label(binary_image, background=0)
         l_max = self.__largest_label_volume(labels, bg=0)
-        if l_max is not None: # There are air pockets
+        if l_max is not None:
             binary_image[labels != l_max] = 0
         if binary_image[np.nonzero(binary_image)].shape[0] < 2000000:
             return image

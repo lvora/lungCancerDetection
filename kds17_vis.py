@@ -20,23 +20,23 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import animation as an
 
+
 def animate(image):
     print('Preparing animation')
     fig = plt.figure()
     ims = []
-    ax = fig.add_subplot(111)
     for i in range(image.shape[0]):
         im = plt.imshow(image[i], cmap=plt.cm.gray)
         ims.append([im])
-    ani = an.ArtistAnimation(fig, ims, interval=50, blit=True)
+    an.ArtistAnimation(fig, ims, interval=50, blit=True)
     print('Animating')
     plt.show()
 
+
 def rotate(image, pos):
-    pos_dict = {'anterposterior' : (1,0),
-                'r2l_saggital' : (2,0)}
+    pos_dict = {'anterposterior': (1, 0),
+                'r2l_saggital': (2, 0)}
     if pos == 'transverse':
         return image
     else:
-        return np.rot90(image,axes=pos_dict[pos])
-
+        return np.rot90(image, axes=pos_dict[pos])
