@@ -19,10 +19,11 @@ import time
 import numpy as np
 import kds17_tf_input as tf_input
 import kds17_io as kio
+import os
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
-BATCH_SIZE = 1
+BATCH_SIZE = 3
 MAX_STEPS = 1000000
 MOVING_AVERAGE_DECAY = 0.9999     
 NUM_EPOCHS_PER_DECAY = 350.0      
@@ -33,6 +34,7 @@ FILTER_SIZE = 8
 IN_CHANNEL = 1
 OUT_CHANNEL = 1
 DTYPE = tf.float32
+train_dir = '/home/charlie/kds_train'
 
 def __activation_summary(x):
    tensor_name = x.op.name
@@ -44,63 +46,54 @@ def __var_on_cpu_mem(name, shape, initializer=None, dtype=tf.float32):
         return tf.get_variable(name,shape,initializer=initializer,dtype=dtype)
 
 def inference(images):
-    im_q = __partition(images)
-    with tf.variable_scope('sum_softmax_linear') as scope:
+    with tf.variable_scope('conv1') as scope:
+        kernel = __var_on_cpu_mem('weights', 
+                        [FILTER_SIZE,FILTER_SIZE,FILTER_SIZE,IN_CHANNEL, OUT_CHANNEL], 
+                        initializer=tf.truncated_normal_initializer(
+                            stddev=5e-2,
+                            dtype=DTYPE))
+        conv = tf.nn.conv3d(images, kernel, [1,1,1,1,1], padding='SAME')
+        biases = __var_on_cpu_mem('biases',
+                        [IN_CHANNEL*OUT_CHANNEL],
+                        initializer=tf.constant_initializer(0.0))
+        pre_activation = tf.nn.bias_add(conv,biases)
+        conv1 = tf.nn.relu(pre_activation, name=scope.name)
+        __activation_summary(conv1)
+
+    pool1 = tf.nn.max_pool3d(conv1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1],
+                            padding='SAME', name='pool1')
+
+    in_channel_squeeze = tf.squeeze(pool1, [4])
+
+    norm1 = tf.nn.lrn(in_channel_squeeze, BATCH_SIZE, bias=1.0, alpha=0.001 / 16.0, 
+                        beta=0.75, name='norm1')
+
+    with tf.variable_scope('local2') as scope:
+        reshape = tf.reshape(pool1, [BATCH_SIZE, -1])
+        dim = (IMAGE_SIZE**3)/8
+        weights = __var_on_cpu_mem('weights', [dim, 16])
+        biases = __var_on_cpu_mem('biases', 
+                        [16], 
+                        initializer=tf.constant_initializer(0.1))
+        local2 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
+        __activation_summary(local2)
+
+    with tf.variable_scope('local3') as scope:
+        weights = __var_on_cpu_mem('weights', [16, 8])
+        biases = __var_on_cpu_mem('biases', 
+                        [8], 
+                        initializer=tf.constant_initializer(0.1), 
+                        dtype=DTYPE)
+        local3 = tf.nn.relu(tf.matmul(local2, weights) + biases, name=scope.name)
+        __activation_summary(local3)
+
+    with tf.variable_scope('softmax_linear') as scope:
         weights = __var_on_cpu_mem('weights', [8, NUM_CLASSES])
         biases = __var_on_cpu_mem('biases', 
                         [NUM_CLASSES], 
                         initializer=tf.constant_initializer(0.0))
         softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
         __activation_summary(softmax_linear)
-    for ims in im_q:
-        with tf.variable_scope('conv1') as scope:
-            kernel = __var_on_cpu_mem('weights', 
-                            [FILTER_SIZE,FILTER_SIZE,FILTER_SIZE,IN_CHANNEL, OUT_CHANNEL], 
-                            initializer=tf.truncated_normal_initializer(
-                                stddev=5e-2,
-                                dtype=DTYPE))
-            conv = tf.nn.conv3d(ims, kernel, [1,1,1,1,1], padding='SAME')
-            biases = __var_on_cpu_mem('biases',
-                            [IN_CHANNEL*OUT_CHANNEL],
-                            initializer=tf.constant_initializer(0.0))
-            pre_activation = tf.nn.bias_add(conv,biases)
-            conv1 = tf.nn.relu(pre_activation, name=scope.name)
-            __activation_summary(conv1)
-
-        pool1 = tf.nn.max_pool3d(conv1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1],
-                                padding='SAME', name='pool1')
-
-        in_channel_squeeze = tf.squeeze(pool1, [4])
-
-        norm1 = tf.nn.lrn(in_channel_squeeze, BATCH_SIZE, bias=1.0, alpha=0.001 / 16.0, 
-                            beta=0.75, name='norm1')
-
-        with tf.variable_scope('local2') as scope:
-            reshape = tf.reshape(pool1, [BATCH_SIZE, -1])
-            dim = reshape.get_shape()[1].value
-            weights = __var_on_cpu_mem('weights', [dim, 16])
-            biases = __var_on_cpu_mem('biases', 
-                            [16], 
-                            initializer=tf.constant_initializer(0.1))
-            local2 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
-            __activation_summary(local2)
-
-        with tf.variable_scope('local3') as scope:
-            weights = __var_on_cpu_mem('weights', [16, 8])
-            biases = __var_on_cpu_mem('biases', 
-                            [8], 
-                            initializer=tf.constant_initializer(0.1), 
-                            dtype=DTYPE)
-            local3 = tf.nn.relu(tf.matmul(local2, weights) + biases, name=scope.name)
-            __activation_summary(local3)
-
-        with tf.variable_scope('softmax_linear') as scope:
-            weights = __var_on_cpu_mem('weights', [8, NUM_CLASSES])
-            biases = __var_on_cpu_mem('biases', 
-                            [NUM_CLASSES], 
-                            initializer=tf.constant_initializer(0.0))
-            softmax_linear = tf.add(tf.matmul(local3, weights), biases, name=scope.name)
-            __activation_summary(softmax_linear)
 
     return softmax_linear
 
@@ -157,13 +150,14 @@ def train(total_loss, global_step):
     return train_op
 
 def run_train(DicomIO, max_steps = 10):
+    feeder = tf_input.DicomFeeder(DicomIO)
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
-        feeder = tf_input.DicomFeeder(DicomIO)
-        images, labels = feeder.next_batch(BATCH_SIZE)
+        images, labels = tf_input.placeholder_inputs(BATCH_SIZE)
         logits = inference(images)
         losss = loss(logits, labels)
         train_op = train(losss, global_step)
+        saver = tf.train.Saver(tf.global_variables())
         summary_op = tf.summary.merge_all()
         init = tf.global_variables_initializer()
         session_config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
@@ -171,13 +165,25 @@ def run_train(DicomIO, max_steps = 10):
         sess = tf.Session(config=session_config)
         sess.run(init)
         tf.train.start_queue_runners(sess=sess)
+        summary_writer = tf.summary.FileWriter(train_dir, sess.graph)
         start_step = 0
         for step in xrange(start_step, start_step+max_steps):
             start_time = time.time()
-            _, loss_value = sess.run([train_op, losss])
+            feed_dict = tf_input.fill_feed_dict(feeder, images, labels, BATCH_SIZE, False)
+            _, loss_value, summary_str = sess.run([train_op, losss, summary_op], feed_dict=feed_dict)
             duration = time.time() - start_time
-            print('Duration: %.3f Loss: %.3f' % (duration,loss_value))
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+            examples_per_sec = BATCH_SIZE / duration
+            sec_per_batch = float(duration)
+            format_str = ('step %d, loss = %.2f (%.1f examples/sec; %.3f '
+                      'sec/batch)')
+            print (format_str % (step, loss_value,
+                                 examples_per_sec, sec_per_batch))
+
+            if step % 10 == 0:
+               summary_writer.add_summary(summary_str, step)
+               checkpoint_path = os.path.join(train_dir, 'model.ckpt')
+               saver.save(sess, checkpoint_path, global_step=step)
 
 def __partition(im):
     im_q = []
