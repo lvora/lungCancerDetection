@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import kds17_io as kio
+from scipy import ndimage as nd
 import tensorflow as tf
 import numpy as np
 
@@ -51,7 +52,7 @@ class DicomFeeder(object):
             self.__epoch += 1
 
         image_batch = self.__io.load_batch(
-                this_set[self.__batch_index]).batch
+                this_set[self.__batch_index], squelch=True).batch
 
         images = [np.expand_dims(x.image, axis=-1) for x in image_batch]
         labels = [int(x.label) for x in image_batch]
@@ -62,13 +63,18 @@ class DicomFeeder(object):
         
         self.__batch_index += 1
 
-        return mid_crop(images[:batch_size]), labels[:batch_size]
+        if from_eval_set:
+            return rand_crop(images[:batch_size]), labels[:batch_size]
+        else:
+            return rand_crop(images[:batch_size]), labels[:batch_size]
 
-def mid_crop(im):
+def rand_crop(im):
     im_slice = []
     for i in im:
-        shape = np.array(i.shape)
-        start = (shape[:3]-IMAGE_SIZE)//2
+        shape = np.array(i.shape)[:3]
+        offset = (np.random.rand(1,3)-0.5)[0]
+        start = shape-IMAGE_SIZE
+        start = np.array(start//2+start*offset//2, dtype=np.int)
         end = start+IMAGE_SIZE
         im_slice.append(i[start[0]:end[0], 
                           start[1]:end[1], 

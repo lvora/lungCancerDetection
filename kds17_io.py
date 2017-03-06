@@ -218,8 +218,9 @@ class DicomIO:
             pickle.dump(dicomBatch, f)
         self.__check_path()
         
-    def load_batch(self, pickle_name): 
-        print('Loading %s from %s' % (pickle_name, self.pickle_dir))
+    def load_batch(self, pickle_name, squelch=False): 
+        if not squelch:
+            print('Loading %s from %s' % (pickle_name, self.pickle_dir))
         with open(os.path.join(self.pickle_dir, pickle_name), 'rb')as f:
             return pickle.load(f)
 
