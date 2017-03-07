@@ -24,12 +24,10 @@ IMAGE_SIZE = 80
 class DicomFeeder(object):
     def __init__(self, DicomIO):
         self.__batch_index = 0
-        self.__image_index = 0
         self.__epoch = 0
         self.__batch_file_list = DicomIO.batch_file_list
         self.__train_set, self.__eval_set = self.__generate_train_and_eval()
         self.__io = DicomIO
-        self.__eval = False
 
     def __generate_train_and_eval(self):
         np.random.shuffle(self.__batch_file_list)

@@ -85,17 +85,8 @@ def inference(images):
                              padding='SAME',
                              name='pool1')
 
-    in_channel_squeeze = tf.squeeze(pool1, [4])
-
-    norm1 = tf.nn.lrn(in_channel_squeeze, 
-                      BATCH_SIZE, 
-                      bias=1.0, 
-                      alpha=0.001 / 16.0, 
-                      beta=0.75, 
-                      name='norm1')
-
     with tf.variable_scope('local2') as scope:
-        reshape = tf.reshape(norm1, [BATCH_SIZE, -1])
+        reshape = tf.reshape(pool1, [BATCH_SIZE, -1])
         dim = (IMAGE_SIZE**3)/8
         weights = __var_on_cpu_mem('weights', [dim, 16], DECAY)
         biases = __var_on_cpu_mem('biases', 
@@ -191,6 +182,7 @@ def run_train(DicomIO, max_steps=10):
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
         images, labels = tf_input.placeholder_inputs(BATCH_SIZE)
+        tf.summary.image('images', images)
         logits = inference(images)
         loss_val = loss(logits, labels)
         train_op = train(loss_val, global_step)
