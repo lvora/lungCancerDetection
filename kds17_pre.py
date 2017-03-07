@@ -26,7 +26,7 @@ from scipy import ndimage as nd
 import time
 from tqdm import tqdm
 import numpy as np
-import cv2
+#import cv2
 import threading as th
 import pickle
 from matplotlib import pyplot as plt
@@ -39,9 +39,13 @@ import kds17_io as kio
 #import pprint
 #import multiprocessing as mp
 
-im_dir = '/home/charlie/kaggle_stage1/'
-label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
-pickle_dir = '/home/charlie/kaggle_pickles'
+# im_dir = '/home/charlie/kaggle_stage1/'
+# label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+# pickle_dir = '/home/charlie/kaggle_pickles'
+
+im_dir = 'F:\\Kaggle Data\\Extracted Data\\stage1'
+label_dir = 'F:\\Kaggle Data\\Extracted Data\\stage1_labels.csv'
+pickle_dir = 'F:\\Kaggle Data\\Output\\Pickles'
 
 class DicomDict:
     ''' DicomDict
@@ -365,19 +369,19 @@ class DicomBatch:
 
 
 def main(argv=None):
-    #x = DicomDict(im_dir, label_dir)
+    x = DicomDict(im_dir, label_dir)
 
-    #y = DicomBatch(x, 'test_batch3')
-    #y.process_batch('zoom')
+    y = DicomBatch(x, 'test_batch3')
+    y.process_batch('zoom')
 
     io = kio.DicomIO(pickle_dir)
-    #io.save(y)
+    io.save(y)
 
-    z = io.load('test_batch3.pkl')
-
-    z.batch[0].animate()
-    
-    print(z[0].batch[0].label)
+    # z = io.load('test_batch3.pkl')
+    #
+    # z.batch[0].animate()
+    #
+    # print(z[0].batch[0].label)
     #print(z[1].batch[4].image.shape)
 
 
