@@ -32,7 +32,7 @@ def main(argv = None):
 # Creating an IO object with working directories 
 # im_dir and label_dir are not required after
 # batches exist in your pickle_dir
-#    io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
+    io = kio.DicomIO(pickle_dir, im_dir, label_dir)
 
 # This will save a dictionary.pkl in your pickle_dir
 #    io.save_dict()
@@ -44,7 +44,7 @@ def main(argv = None):
 # then it will conduct all preprocessing in threads that should not exceed
 # system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
 # am assuming it works.
-    io.build_batch()
+#    io.build_batch()
         
 # This is an example of loading all batches from your pickle_dir into a list of
 # DicomBatch objects
