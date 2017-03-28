@@ -304,21 +304,19 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                 checkpoint_path = os.path.join(train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 
-                # if step%1000 == 0:
-        num_correct = 0
-        for i in xrange(10):  # 10 here can be replaced with number of evaluation images or portion of it
-            feed_dict = tf_input.fill_feed_dict(feeder,
-                                                images,
-                                                labels,
-                                                BATCH_SIZE,
-                                                True,
-                                                keep_prob,DROPOUT_VAL)
-            pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
-            num_correct = num_correct + pred[0]
-            # logits_s = sess.run([logits],feed_dict=feed_dict)
-
-        accuracy_eval = num_correct / 10
-        format_str = ('EVALUATION SET: step %d, loss = %.2f, accuracy=%.2f')
-        print(format_str % (step,
-                            loss_value,
-                            accuracy_eval))
+            if step%1000 == 0:
+                num_correct = 0
+                for i in xrange(10):  # 10 here can be replaced with number of evaluation images or portion of it
+                    feed_dict = tf_input.fill_feed_dict(feeder,
+                                                        images,
+                                                        labels,
+                                                        BATCH_SIZE,
+                                                        True,
+                                                        keep_prob,DROPOUT_VAL)
+                    pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
+                    num_correct = num_correct + pred[0]
+                accuracy_eval = num_correct / 10
+                format_str = ('EVALUATION SET: step %d, loss = %.2f, accuracy=%.2f')
+                print(format_str % (step,
+                                    loss_value,
+                                    accuracy_eval))
