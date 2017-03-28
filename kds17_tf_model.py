@@ -41,6 +41,7 @@ IN_CHANNEL_2 = 1
 OUT_CHANNEL_2 = 1
 IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
+DROPOUT_VAL = 0.8
 DTYPE = tf.float32
 train_dir = '/home/praneetha/kds_train'
 
@@ -63,7 +64,7 @@ def __var_on_cpu_mem(name, shape, decay, initializer=None, dtype=tf.float32):
     return x
 
 
-def inference(images):
+def inference(images,keep_prob):
     with tf.variable_scope('conv1') as scope:
         kernel = __var_on_cpu_mem('weights',
                                   [FILTER_SIZE,
@@ -154,22 +155,24 @@ def inference(images):
     with tf.variable_scope('local2') as scope:
         reshape = tf.reshape(pool3, [BATCH_SIZE, -1])
         dim = (IMAGE_SIZE**3)/(8*8*8)
-        weights = __var_on_cpu_mem('weights', [dim, 16], DECAY)
+        weights = __var_on_cpu_mem('weights', [dim, 256], DECAY)
         biases = __var_on_cpu_mem('biases',
-                                  [16],
+                                  [256],
                                   None,
                                   initializer=tf.constant_initializer(0.1))
-        local2 = tf.nn.relu(tf.matmul(reshape, weights) + biases,
+        drop_out = tf.nn.dropout(reshape, keep_prob)
+        local2 = tf.nn.relu(tf.matmul(drop_out, weights) + biases,
                             name=scope.name)
         __activation_summary(local2)
 
     with tf.variable_scope('local3') as scope:
-        weights = __var_on_cpu_mem('weights', [16, 8], DECAY)
+        weights = __var_on_cpu_mem('weights', [256, 8], DECAY)
         biases = __var_on_cpu_mem('biases',
                                   [8],
                                   None,
                                   initializer=tf.constant_initializer(0.1),
                                   dtype=DTYPE)
+
         local3 = tf.nn.relu(tf.matmul(local2, weights) + biases,
                             name=scope.name)
         __activation_summary(local3)
@@ -255,9 +258,9 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
     feeder = tf_input.DicomFeeder(DicomIO)
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
-        images, labels = tf_input.placeholder_inputs(BATCH_SIZE)
+        images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE)
 #        tf.summary.image('images', images)
-        logits = inference(images)
+        logits = inference(images,keep_prob)
         loss_val = loss(logits, labels)
         train_op = train(loss_val, global_step)
         eval_op = evaluate(logits,labels)
@@ -278,7 +281,9 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                                                 images,
                                                 labels,
                                                 BATCH_SIZE,
-                                                False)
+                                                False,
+                                                keep_prob,
+                                                DROPOUT_VAL)
             _, loss_value, summary_str = sess.run([train_op,
                                                    loss_val,
                                                    summary_op],
@@ -306,7 +311,8 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                                                 images,
                                                 labels,
                                                 BATCH_SIZE,
-                                                True)
+                                                True,
+                                                keep_prob,DROPOUT_VAL)
             pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
             num_correct = num_correct + pred[0]
             # logits_s = sess.run([logits],feed_dict=feed_dict)
