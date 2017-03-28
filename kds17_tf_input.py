@@ -98,15 +98,22 @@ def placeholder_inputs(batch_size):
                                                            IMAGE_SIZE, 
                                                            1])) 
     label_placeholder = tf.placeholder(tf.int32, shape=(batch_size, ))
-    return image_placeholder, label_placeholder
+    keep_prob = tf.placeholder(tf.float32)
+    return image_placeholder, label_placeholder, keep_prob
 
 
-def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval):
+def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval, dropout, do_val):
     image_feed, label_feed = feeder.next_batch(batch_size, for_eval)
-    
+
+    if for_eval:
+        do  = 1
+    else:
+        do = do_val
+
     feed_dict = {
             image_pl: image_feed,
             label_pl: label_feed,
+            dropout: do
             }
 
     return feed_dict
