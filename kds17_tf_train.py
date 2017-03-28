@@ -18,9 +18,9 @@ import kds17_io as kio
 
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data/stage1' 
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickles/' 
+    im_dir = '/home/praneetha/Downloads/images'
+    label_dir = '/home/praneetha/Downloads/stage1_labels.csv'
+    pickle_dir = '/home/praneetha/kaggle_pickles/'
 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
     tf_model.run_train(io, 10000)

@@ -21,18 +21,18 @@ from matplotlib import pyplot as plt
 
 def main(argv = None):
 # This is the top level folder containing all scan folders
-    im_dir = '/home/charlie/kaggle_stage1' 
+    im_dir = '/home/praneetha/Downloads/images' 
 
 # This is the path to the labels in csv
-    label_dir = '/home/charlie/kaggle_stage1/stage1_labels.csv'
+    label_dir = '/home/praneetha/Downloads/stage1_labels.csv'
 
 # This will be created if it does not exist
-    pickle_dir = '/home/charlie/kaggle_pickles/' 
+    pickle_dir = '/home/praneetha/kaggle_pickles/' 
 
 # Creating an IO object with working directories 
 # im_dir and label_dir are not required after
 # batches exist in your pickle_dir
-    io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
+#    io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
 
 # This will save a dictionary.pkl in your pickle_dir
 #    io.save_dict()
@@ -44,7 +44,7 @@ def main(argv = None):
 # then it will conduct all preprocessing in threads that should not exceed
 # system memory. PSUTILs is used here and may fail.  Sorry if it does because I 
 # am assuming it works.
-#    io.build_batch()
+    io.build_batch()
         
 # This is an example of loading all batches from your pickle_dir into a list of
 # DicomBatch objects

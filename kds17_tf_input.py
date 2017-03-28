@@ -16,6 +16,7 @@
 
 import tensorflow as tf
 import numpy as np
+from six.moves import xrange
 
 # Global Variables
 IMAGE_SIZE = 80
@@ -62,8 +63,16 @@ class DicomFeeder(object):
         self.__batch_index += 1
 
         if from_eval_set:
-            return rand_crop(images[:batch_size]), labels[:batch_size]
+            images_agg = []
+            labels_agg = []
+            rand_num = np.random.randint(1, 3)
+            #return rand_crop(images[:batch_size]), labels[:batch_size]  #ORIGINAL
+            for i in xrange(batch_size):
+                images_agg.append(images[rand_num])
+                labels_agg.append(labels[rand_num])
+            return rand_crop(images_agg), labels_agg
         else:
+            shape = np.array(images[batch_size-1].shape)
             return rand_crop(images[:batch_size]), labels[:batch_size]
 
 
@@ -100,5 +109,4 @@ def fill_feed_dict(feeder, image_pl, label_pl, batch_size, for_eval):
             label_pl: label_feed,
             }
 
-    return feed_dict 
-
+    return feed_dict
