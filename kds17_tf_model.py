@@ -30,8 +30,8 @@ MOVING_AVERAGE_DECAY = 0.99
 NUM_EPOCHS_PER_DECAY = 350.0
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
 LEARNING_RATE_DECAY_FACTOR = 1e-07
-INITIAL_LEARNING_RATE = 5e-07
-DECAY = 0.1
+INITIAL_LEARNING_RATE = 5e-04
+DECAY = 0.4
 FILTER_SIZE = 8
 FILTER_SIZE_2 = 5
 FILTER_SIZE_3 = 3
@@ -41,9 +41,9 @@ IN_CHANNEL_2 = 1
 OUT_CHANNEL_2 = 1
 IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
-DROPOUT_VAL = 0.8
+DROPOUT_VAL = 0.99
 DTYPE = tf.float32
-train_dir = '/home/praneetha/kds_train'
+train_dir = '/home/charlie/kds_train'
 
 
 def __activation_summary(x):
@@ -257,7 +257,14 @@ def train(total_loss, global_step):
 def run_train(DicomIO, max_steps=10, logits_op=None):
     feeder = tf_input.DicomFeeder(DicomIO)
     with tf.Graph().as_default():
-        global_step = tf.Variable(0, trainable=False)
+
+        if tf.gfile.Exists(train_dir):
+            print('Checkpoint')
+            ckpt = tf.train.get_checkpoint_state(train_dir)
+            global_step = tf.Variable(int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]), trainable=False)
+        else:
+            global_step = tf.Variable(0, trainable=False)
+
         images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE)
 #        tf.summary.image('images', images)
         logits = inference(images,keep_prob)
@@ -272,9 +279,16 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         session_config.gpu_options.allocator_type = 'BFC'
         sess = tf.Session(config=session_config)
         sess.run(init)
+
+        if tf.gfile.Exists(train_dir):
+            tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
+            start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
+        else:
+            tf.gfile.MakeDirs(train_dir)
+            start_step = 0
+
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(train_dir, sess.graph)
-        start_step = 0
         for step in xrange(start_step, start_step+max_steps):
             start_time = time.time()
             feed_dict = tf_input.fill_feed_dict(feeder,
