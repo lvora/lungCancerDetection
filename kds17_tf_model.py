@@ -32,9 +32,9 @@ NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
 LEARNING_RATE_DECAY_FACTOR = 1e-07
 INITIAL_LEARNING_RATE = 5e-04
 DECAY = 0.4
-FILTER_SIZE = 8
-FILTER_SIZE_2 = 5
-FILTER_SIZE_3 = 3
+FILTER_SIZE_1 = 1
+FILTER_SIZE_2 = 3
+FILTER_SIZE_3 = 5
 IN_CHANNEL = 1
 OUT_CHANNEL = 1
 IN_CHANNEL_2 = 1
@@ -43,7 +43,7 @@ IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
 DROPOUT_VAL = 0.99
 DTYPE = tf.float32
-train_dir = '/home/charlie/kds_train'
+train_dir = '/Users/lipivora/Documents/train_dir'
 
 
 def __activation_summary(x):
@@ -65,21 +65,62 @@ def __var_on_cpu_mem(name, shape, decay, initializer=None, dtype=tf.float32):
 
 
 def inference(images,keep_prob):
+    # Each layer of convolution will have multiple filters
+    # Kernel 1 is a 1 by 1 convolution
+    kernel1 = __var_on_cpu_mem('weights11',
+                               [FILTER_SIZE_1,
+                                FILTER_SIZE_1,
+                                FILTER_SIZE_1,
+                                IN_CHANNEL,
+                                OUT_CHANNEL],
+                               None,
+                               initializer=tf.truncated_normal_initializer(
+                                   stddev=5e-2,
+                                   dtype=DTYPE))
+    # Kernel 2 is a 3 by 3 convolution
+    kernel2 = __var_on_cpu_mem('weights12',
+                               [FILTER_SIZE_2,
+                                FILTER_SIZE_2,
+                                FILTER_SIZE_2,
+                                IN_CHANNEL,
+                                OUT_CHANNEL],
+                               None,
+                               initializer=tf.truncated_normal_initializer(
+                                   stddev=5e-2,
+                                   dtype=DTYPE))
+
+    # Kernel 3 is a 5 by 5 convolution
+    kernel3 = __var_on_cpu_mem('weights13',
+                               [FILTER_SIZE_3,
+                                FILTER_SIZE_3,
+                                FILTER_SIZE_3,
+                                IN_CHANNEL,
+                                OUT_CHANNEL],
+                               None,
+                               initializer=tf.truncated_normal_initializer(
+                                   stddev=5e-2,
+                                   dtype=DTYPE))
+
     with tf.variable_scope('conv1') as scope:
-        kernel = __var_on_cpu_mem('weights',
-                                  [FILTER_SIZE,
-                                   FILTER_SIZE,
-                                   FILTER_SIZE,
-                                   IN_CHANNEL,
-                                   OUT_CHANNEL],
-                                  None,
-                                  initializer=tf.truncated_normal_initializer(
-                                      stddev=5e-2,
-                                      dtype=DTYPE))
-        conv = tf.nn.conv3d(images,
-                            kernel,
+
+        conv11 = tf.nn.conv3d(images,
+                            kernel1,
                             [1, 1, 1, 1, 1],
                             padding='SAME')
+
+        conv12= tf.nn.conv3d(images,
+                            kernel2,
+                            [1, 1, 1, 1, 1],
+                            padding='SAME')
+
+        conv13 = tf.nn.conv3d(images,
+                            kernel3,
+                            [1, 1, 1, 1, 1],
+                            padding='SAME')
+
+        # We need to concatenate the output of the various convolutions:
+        conv = tf.concat(0, [conv11, conv12])
+        conv = tf.concat(0, [conv, conv13])
         biases = __var_on_cpu_mem('biases',
                                   [IN_CHANNEL*OUT_CHANNEL],
                                   None,
@@ -88,74 +129,55 @@ def inference(images,keep_prob):
         conv1 = tf.nn.relu(pre_activation, name=scope.name)
         __activation_summary(conv1)
 
+
     pool1 = tf.nn.max_pool3d(conv1,
                              ksize=[1, 2, 2, 2, 1],
                              strides=[1, 2, 2, 2, 1],
                              padding='SAME',
                              name='pool1')
+    new_dim = BATCH_SIZE * 3  # 3 is number of filters in any layer
 
     with tf.variable_scope('conv2') as scope:
-        kernel = __var_on_cpu_mem('weights',
-                                  [FILTER_SIZE_2,
-                                   FILTER_SIZE_2,
-                                   FILTER_SIZE_2,
-                                   IN_CHANNEL_2,
-                                   OUT_CHANNEL_2],
-                                  None,
-                                  initializer=tf.truncated_normal_initializer(
-                                      stddev=5e-2,
-                                      dtype=DTYPE))
-        conv = tf.nn.conv3d(pool1,
-                            kernel,
+
+
+        conv21 = tf.nn.conv3d(pool1,
+                            kernel1,
                             [1, 1, 1, 1, 1],
                             padding='SAME')
+
+        conv22= tf.nn.conv3d(pool1,
+                            kernel2,
+                            [1, 1, 1, 1, 1],
+                            padding='SAME')
+
+        conv23 = tf.nn.conv3d(pool1,
+                            kernel3,
+                            [1, 1, 1, 1, 1],
+                            padding='SAME')
+        conv2 = tf.concat(0, [conv21, conv22])
+        conv2 = tf.concat(0, [conv2, conv23])
+
         biases = __var_on_cpu_mem('biases',
                                   [IN_CHANNEL * OUT_CHANNEL],
                                   None,
                                   initializer=tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
+
+        pre_activation = tf.nn.bias_add(conv2, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
+        __activation_summary(conv2)
 
     pool2 = tf.nn.max_pool3d(conv2,
                              ksize=[1, 2, 2, 2, 1],
                              strides=[1, 2, 2, 2, 1],
                              padding='SAME',
                              name='pool1')
+    new_dim *= 3
 
-    with tf.variable_scope('conv3') as scope:
-        kernel = __var_on_cpu_mem('weights',
-                                  [FILTER_SIZE_3,
-                                   FILTER_SIZE_3,
-                                   FILTER_SIZE_3,
-                                   IN_CHANNEL_2,
-                                   OUT_CHANNEL_2],
-                                  None,
-                                  initializer=tf.truncated_normal_initializer(
-                                      stddev=5e-2,
-                                      dtype=DTYPE))
-        conv = tf.nn.conv3d(pool2,
-                            kernel,
-                            [1, 1, 1, 1, 1],
-                            padding='SAME')
-        biases = __var_on_cpu_mem('biases',
-                                  [IN_CHANNEL * OUT_CHANNEL],
-                                  None,
-                                  initializer=tf.constant_initializer(0.0))
-        pre_activation = tf.nn.bias_add(conv, biases)
-        conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
-
-    pool3 = tf.nn.max_pool3d(conv2,
-                             ksize=[1, 2, 2, 2, 1],
-                             strides=[1, 2, 2, 2, 1],
-                             padding='SAME',
-                             name='pool1')
 
     with tf.variable_scope('local2') as scope:
-        reshape = tf.reshape(pool3, [BATCH_SIZE, -1])
-        dim = (IMAGE_SIZE**3)/(8*8*8)
-        weights = __var_on_cpu_mem('weights', [dim, 256], DECAY)
+        reshape = tf.reshape(pool2, [new_dim, -1])
+        dim = (IMAGE_SIZE**3)/(8*8)
+        weights = __var_on_cpu_mem('weights3', [dim, 256], DECAY)
         biases = __var_on_cpu_mem('biases',
                                   [256],
                                   None,
