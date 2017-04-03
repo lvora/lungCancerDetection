@@ -146,7 +146,7 @@ def inference(images,keep_prob):
                                   initializer=tf.constant_initializer(0.0))
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
+        __activation_summary(conv2)
 
     pool3 = tf.nn.max_pool3d(conv2,
                              ksize=[1, 2, 2, 2, 1],
