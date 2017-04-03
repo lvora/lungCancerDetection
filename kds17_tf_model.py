@@ -22,6 +22,7 @@ import os
 import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
+NUM_OF_RAND_CROP_PER_IMAGE = tf_input.NUM_OF_RAND_CROP_PER_IMAGE
 NUM_CLASSES = 2
 BATCH_SIZE = 2
 #MAX_STEPS = 1000000
@@ -43,7 +44,8 @@ IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
 DROPOUT_VAL = 0.99
 DTYPE = tf.float32
-train_dir = '/home/charlie/kds_train'
+
+train_dir = '/Users/lipivora/Documents/train_dir'
 
 
 def __activation_summary(x):
@@ -153,7 +155,7 @@ def inference(images,keep_prob):
                              name='pool1')
 
     with tf.variable_scope('local2') as scope:
-        reshape = tf.reshape(pool3, [BATCH_SIZE, -1])
+        reshape = tf.reshape(pool3, [BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE, -1])
         dim = (IMAGE_SIZE**3)/(8*8*8)
         weights = __var_on_cpu_mem('weights', [dim, 256], DECAY)
         biases = __var_on_cpu_mem('biases',
@@ -265,7 +267,7 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         else:
             global_step = tf.Variable(0, trainable=False)
 
-        images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE)
+        images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE)
 #        tf.summary.image('images', images)
         logits = inference(images,keep_prob)
         loss_val = loss(logits, labels)
@@ -280,12 +282,12 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         sess = tf.Session(config=session_config)
         sess.run(init)
 
-        if tf.gfile.Exists(train_dir):
-            tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
-            start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
-        else:
-            tf.gfile.MakeDirs(train_dir)
-            start_step = 0
+        # if tf.gfile.Exists(train_dir):
+        #     tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
+        #     start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
+        # else:
+        #     tf.gfile.MakeDirs(train_dir)
+        start_step = 0
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(train_dir, sess.graph)
@@ -304,7 +306,7 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                                                   feed_dict=feed_dict)
             duration = time.time() - start_time
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
-            examples_per_sec = BATCH_SIZE / duration
+            examples_per_sec = (BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE) / duration
             sec_per_batch = float(duration)
             format_str = ('step %d, loss = %.2f (%.1f examples/sec; %.3f '
                           'sec/batch)')
