@@ -22,8 +22,9 @@ import os
 import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
+NUM_OF_RAND_CROP_PER_IMAGE = tf_input.NUM_OF_RAND_CROP_PER_IMAGE
 NUM_CLASSES = 2
-BATCH_SIZE = 32
+BATCH_SIZE = 6
 #MAX_STEPS = 1000000
 MAX_STEPS = 10
 MOVING_AVERAGE_DECAY = 0.99
@@ -36,11 +37,9 @@ FILTER_SIZE = 8
 FILTER_SIZE_2 = 5
 FILTER_SIZE_3 = 3
 IN_CHANNEL = 1
-OUT_CHANNEL = 1
-IN_CHANNEL_2 = 1
-OUT_CHANNEL_2 = 1
-IN_CHANNEL_3 = 1
-OUT_CHANNEL_3 = 1
+CONV1_CHANNEL = 64
+CONV2_CHANNEL = 49
+CONV3_CHANNEL = 36
 DROPOUT_VAL = 0.5
 DTYPE = tf.float32
 train_dir = '/home/charlie/kds_train'
@@ -69,17 +68,17 @@ def inference(images,keep_prob):
                                    FILTER_SIZE,
                                    FILTER_SIZE,
                                    IN_CHANNEL,
-                                   OUT_CHANNEL],
+                                   CONV1_CHANNEL],
                                   None,
                                   initializer=tf.truncated_normal_initializer(
                                       stddev=5e-2,
                                       dtype=DTYPE))
         conv = tf.nn.conv3d(images,
                             kernel,
-                            [1, 1, 1, 1, 1],
+                            [1, 2, 2, 2, 1],
                             padding='SAME')
         biases = __var_on_cpu_mem('biases',
-                                  [IN_CHANNEL*OUT_CHANNEL],
+                                  [CONV1_CHANNEL],
                                   None,
                                   initializer=tf.constant_initializer(0.0))
         pre_activation = tf.nn.bias_add(conv, biases)
@@ -97,23 +96,23 @@ def inference(images,keep_prob):
                                   [FILTER_SIZE_2,
                                    FILTER_SIZE_2,
                                    FILTER_SIZE_2,
-                                   IN_CHANNEL_2,
-                                   OUT_CHANNEL_2],
+                                   CONV1_CHANNEL,
+                                   CONV2_CHANNEL],
                                   None,
                                   initializer=tf.truncated_normal_initializer(
                                       stddev=5e-2,
                                       dtype=DTYPE))
         conv = tf.nn.conv3d(pool1,
                             kernel,
-                            [1, 1, 1, 1, 1],
+                            [1, 2, 2, 2, 1],
                             padding='SAME')
         biases = __var_on_cpu_mem('biases',
-                                  [IN_CHANNEL * OUT_CHANNEL],
+                                  [CONV2_CHANNEL],
                                   None,
                                   initializer=tf.constant_initializer(0.0))
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
+        __activation_summary(conv2)
 
     pool2 = tf.nn.max_pool3d(conv2,
                              ksize=[1, 2, 2, 2, 1],
@@ -126,8 +125,8 @@ def inference(images,keep_prob):
                                   [FILTER_SIZE_3,
                                    FILTER_SIZE_3,
                                    FILTER_SIZE_3,
-                                   IN_CHANNEL_2,
-                                   OUT_CHANNEL_2],
+                                   CONV2_CHANNEL,
+                                   CONV3_CHANNEL],
                                   None,
                                   initializer=tf.truncated_normal_initializer(
                                       stddev=5e-2,
@@ -137,12 +136,12 @@ def inference(images,keep_prob):
                             [1, 1, 1, 1, 1],
                             padding='SAME')
         biases = __var_on_cpu_mem('biases',
-                                  [IN_CHANNEL * OUT_CHANNEL],
+                                  [CONV3_CHANNEL],
                                   None,
                                   initializer=tf.constant_initializer(0.0))
         pre_activation = tf.nn.bias_add(conv, biases)
-        conv2 = tf.nn.relu(pre_activation, name=scope.name)
-        __activation_summary(conv1)
+        conv3 = tf.nn.relu(pre_activation, name=scope.name)
+        __activation_summary(conv3)
 
     pool3 = tf.nn.max_pool3d(conv2,
                              ksize=[1, 2, 2, 2, 1],
@@ -151,8 +150,8 @@ def inference(images,keep_prob):
                              name='pool1')
 
     with tf.variable_scope('local2') as scope:
-        reshape = tf.reshape(pool3, [BATCH_SIZE, -1])
-        dim = (IMAGE_SIZE**3)/(8*8*8)
+        reshape = tf.reshape(pool3, [BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE, -1])
+        dim = np.prod(pool3.get_shape().as_list()[1:5])
         weights = __var_on_cpu_mem('weights', [dim, 256], DECAY)
         biases = __var_on_cpu_mem('biases',
                                   [256],
@@ -260,7 +259,7 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         else:
             global_step = tf.Variable(0, trainable=False)
 
-        images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE)
+        images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE)
 #        tf.summary.image('images', images)
         logits = inference(images,keep_prob)
         loss_val = loss(logits, labels)
@@ -275,12 +274,12 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         sess = tf.Session(config=session_config)
         sess.run(init)
 
-        if tf.gfile.Exists(train_dir):
-            tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
-            start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
-        else:
-            tf.gfile.MakeDirs(train_dir)
-            start_step = 0
+        # if tf.gfile.Exists(train_dir):
+        #     tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
+        #     start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
+        # else:
+        #     tf.gfile.MakeDirs(train_dir)
+        start_step = 0
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(train_dir, sess.graph)
@@ -299,7 +298,7 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                                                   feed_dict=feed_dict)
             duration = time.time() - start_time
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
-            examples_per_sec = BATCH_SIZE / duration
+            examples_per_sec = (BATCH_SIZE * NUM_OF_RAND_CROP_PER_IMAGE) / duration
             sec_per_batch = float(duration)
             format_str = ('step %d, loss = %.2f (%.1f examples/sec; %.3f '
                           'sec/batch)')

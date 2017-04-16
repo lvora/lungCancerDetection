@@ -19,8 +19,8 @@ import numpy as np
 from six.moves import xrange
 
 # Global Variables
-IMAGE_SIZE = 128
-
+IMAGE_SIZE = 120
+NUM_OF_RAND_CROP_PER_IMAGE = 5
 
 class DicomFeeder(object):
     def __init__(self, DicomIO):
@@ -69,25 +69,32 @@ class DicomFeeder(object):
             #return rand_crop(images[:batch_size]), labels[:batch_size]  #ORIGINAL
             for i in xrange(batch_size):
                 images_agg.append(images[rand_num])
-                labels_agg.append(labels[rand_num])
+                for j in range(NUM_OF_RAND_CROP_PER_IMAGE):
+                    labels_agg.append(labels[rand_num])
             return rand_crop(images_agg), labels_agg
         else:
-            #shape = np.array(images[batch_size-1].shape)
-            return rand_crop(images[:batch_size]), labels[:batch_size]
+
+            labels_augmented = []
+            for lab in labels[:batch_size]:
+                for j in range(NUM_OF_RAND_CROP_PER_IMAGE):
+                    labels_augmented.append(lab)
+
+            return rand_crop(images[:batch_size]), labels_augmented
 
 
 def rand_crop(im):
     im_slice = []
     for i in im:
-        shape = np.array(i.shape)[:3]
-        offset = (np.random.rand(1, 3)-0.5)[0]
-        start = shape-IMAGE_SIZE
-        start = np.array(start//2+start*offset//2, dtype=np.int)
-        end = start+IMAGE_SIZE
-        im_slice.append(i[start[0]:end[0], 
-                          start[1]:end[1], 
-                          start[2]:end[2],
-                          :])
+        for j in range(NUM_OF_RAND_CROP_PER_IMAGE):
+            shape = np.array(i.shape)[:3]
+            offset = (np.random.rand(1, 3)-0.5)[0]
+            start = shape-IMAGE_SIZE
+            start = np.array(start//2+start*offset//2, dtype=np.int)
+            end = start+IMAGE_SIZE
+            im_slice.append(i[start[0]:end[0],
+                              start[1]:end[1],
+                              start[2]:end[2],
+                              :])
     return im_slice
 
 
