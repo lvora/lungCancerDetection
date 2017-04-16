@@ -23,7 +23,7 @@ import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
-BATCH_SIZE = 2
+BATCH_SIZE = 32
 #MAX_STEPS = 1000000
 MAX_STEPS = 10
 MOVING_AVERAGE_DECAY = 0.99
@@ -41,7 +41,7 @@ IN_CHANNEL_2 = 1
 OUT_CHANNEL_2 = 1
 IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
-DROPOUT_VAL = 0.99
+DROPOUT_VAL = 0.5
 DTYPE = tf.float32
 train_dir = '/home/charlie/kds_train'
 
@@ -50,7 +50,6 @@ def __activation_summary(x):
     tensor_name = x.op.name
     tf.summary.histogram(tensor_name + '/activations', x)
     tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
-
 
 def __var_on_cpu_mem(name, shape, decay, initializer=None, dtype=tf.float32):
     with tf.device('/cpu:0'):
@@ -62,7 +61,6 @@ def __var_on_cpu_mem(name, shape, decay, initializer=None, dtype=tf.float32):
         reg = tf.multiply(tf.nn.l2_loss(x), decay, name='l2_regularization')
         tf.add_to_collection('losses', reg)
     return x
-
 
 def inference(images,keep_prob):
     with tf.variable_scope('conv1') as scope:
@@ -190,7 +188,6 @@ def inference(images,keep_prob):
 
     return softmax_linear
 
-
 def loss(logits, labels):
     labels = tf.cast(labels, tf.int32)
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -198,7 +195,6 @@ def loss(logits, labels):
     cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
     tf.add_to_collection('losses', cross_entropy_mean)
     return tf.add_n(tf.get_collection('losses'), name='total_loss')
-
 
 def __add_loss_summaries(total_loss):
     loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
@@ -252,7 +248,6 @@ def train(total_loss, global_step):
         train_op = tf.no_op(name='train')
 
     return train_op
-
 
 def run_train(DicomIO, max_steps=10, logits_op=None):
     feeder = tf_input.DicomFeeder(DicomIO)

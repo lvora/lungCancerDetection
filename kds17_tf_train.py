@@ -18,12 +18,12 @@ import kds17_io as kio
 
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data/stage1'
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickles/'
+    im_dir = '/home/charlie/data/lung_cancer/stage1'
+    label_dir = '/home/charlie/data/lung_cancer/stage1_labels.csv'
+    pickle_dir = '/home/charlie/data/kaggle_pickle/'
 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
-    tf_model.run_train(io, 10000)
+    tf_model.run_train(io, 100000)
     #tf_model.run_test(io, 10)
 
 if __name__ == '__main__':

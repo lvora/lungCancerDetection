@@ -19,7 +19,7 @@ import numpy as np
 from six.moves import xrange
 
 # Global Variables
-IMAGE_SIZE = 80
+IMAGE_SIZE = 128
 
 
 class DicomFeeder(object):
@@ -72,7 +72,7 @@ class DicomFeeder(object):
                 labels_agg.append(labels[rand_num])
             return rand_crop(images_agg), labels_agg
         else:
-            shape = np.array(images[batch_size-1].shape)
+            #shape = np.array(images[batch_size-1].shape)
             return rand_crop(images[:batch_size]), labels[:batch_size]
 
 
