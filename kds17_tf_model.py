@@ -19,7 +19,9 @@ import time
 import numpy as np
 import kds17_tf_input as tf_input
 import os
+import sklearn as sk
 import kds17_io as kio
+from sklearn.metrics import confusion_matrix
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
@@ -30,8 +32,8 @@ MOVING_AVERAGE_DECAY = 0.99
 NUM_EPOCHS_PER_DECAY = 350.0
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
 LEARNING_RATE_DECAY_FACTOR = 1e-07
-INITIAL_LEARNING_RATE = 5e-04
-DECAY = 0.4
+INITIAL_LEARNING_RATE = 5e-07
+DECAY = 0.1
 FILTER_SIZE = 8
 FILTER_SIZE_2 = 5
 FILTER_SIZE_3 = 3
@@ -41,10 +43,9 @@ IN_CHANNEL_2 = 1
 OUT_CHANNEL_2 = 1
 IN_CHANNEL_3 = 1
 OUT_CHANNEL_3 = 1
-DROPOUT_VAL = 0.99
+DROPOUT_VAL = 0.8
 DTYPE = tf.float32
-train_dir = '/home/charlie/kds_train'
-
+train_dir = '/home/praneetha/kds_train'
 
 def __activation_summary(x):
     tensor_name = x.op.name
@@ -214,9 +215,11 @@ def evaluate(logits,labels):
     logits_agg = tf.reduce_sum(logits,0,True)
     labels_agg.append(labels[0])
     correct = tf.nn.in_top_k(logits_agg,labels_agg, 1)
+    index_pred = tf.argmax(logits_agg,dimension=1)
+    index_true = labels[0]
     #num_pred = tf.reduce_sum(tf.cast(correct, tf.int32))
     print('In evaluate')
-    return correct
+    return [correct,index_pred,index_true]
 
 def train(total_loss, global_step):
     num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / BATCH_SIZE
@@ -257,20 +260,14 @@ def train(total_loss, global_step):
 def run_train(DicomIO, max_steps=10, logits_op=None):
     feeder = tf_input.DicomFeeder(DicomIO)
     with tf.Graph().as_default():
-
-        if tf.gfile.Exists(train_dir):
-            print('Checkpoint')
-            ckpt = tf.train.get_checkpoint_state(train_dir)
-            global_step = tf.Variable(int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]), trainable=False)
-        else:
-            global_step = tf.Variable(0, trainable=False)
-
+        global_step = tf.Variable(0, trainable=False)
         images, labels, keep_prob = tf_input.placeholder_inputs(BATCH_SIZE)
 #        tf.summary.image('images', images)
         logits = inference(images,keep_prob)
         loss_val = loss(logits, labels)
         train_op = train(loss_val, global_step)
         eval_op = evaluate(logits,labels)
+        #eval_size = get_evaluation_size(feeder)
         saver = tf.train.Saver(tf.global_variables())
         summary_op = tf.summary.merge_all()
         init = tf.global_variables_initializer()
@@ -279,16 +276,9 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
         session_config.gpu_options.allocator_type = 'BFC'
         sess = tf.Session(config=session_config)
         sess.run(init)
-
-        if tf.gfile.Exists(train_dir):
-            tf.train.Saver().restore(sess, ckpt.model_checkpoint_path)
-            start_step = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
-        else:
-            tf.gfile.MakeDirs(train_dir)
-            start_step = 0
-
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(train_dir, sess.graph)
+        start_step = 0
         for step in xrange(start_step, start_step+max_steps):
             start_time = time.time()
             feed_dict = tf_input.fill_feed_dict(feeder,
@@ -318,9 +308,13 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                 checkpoint_path = os.path.join(train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 
-            if step%1000 == 0:
+
+
+            if step%1000 == 0 and step!=0:
+                pred_labels = []
+                true_labels = []
                 num_correct = 0
-                for i in xrange(10):  # 10 here can be replaced with number of evaluation images or portion of it
+                for i in xrange(int(feeder.get_evaluation_size())):  # 10 here can be replaced with number of evaluation images or portion of it
                     feed_dict = tf_input.fill_feed_dict(feeder,
                                                         images,
                                                         labels,
@@ -328,9 +322,16 @@ def run_train(DicomIO, max_steps=10, logits_op=None):
                                                         True,
                                                         keep_prob,DROPOUT_VAL)
                     pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
+                    pred_labels.append(pred[1])
+                    true_labels.append(pred[2])
                     num_correct = num_correct + pred[0]
                 accuracy_eval = num_correct / 10
                 format_str = ('EVALUATION SET: step %d, loss = %.2f, accuracy=%.2f')
                 print(format_str % (step,
                                     loss_value,
                                     accuracy_eval))
+                cf = confusion_matrix(true_labels,pred_labels)
+                print('CONFUSION MATRIX:')
+                print(cf)
+                print("Precision", sk.metrics.precision_score(true_labels,pred_labels))
+                print("Recall", sk.metrics.recall_score(true_labels,pred_labels))

@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-
 import tensorflow as tf
 import numpy as np
 from six.moves import xrange
@@ -25,9 +24,12 @@ IMAGE_SIZE = 80
 class DicomFeeder(object):
     def __init__(self, DicomIO):
         self.__batch_index = 0
+        self.__image_index = -1
+        self.__batch_index_eval = 0
         self.__epoch = 0
         self.__batch_file_list = DicomIO.batch_file_list
         self.__train_set, self.__eval_set = self.__generate_train_and_eval()
+        self.__eval_size = len(self.__batch_file_list)*len((DicomIO.load_batch(self.__batch_file_list[0])).batch)*0.2
         self.__io = DicomIO
 
     def __generate_train_and_eval(self):
@@ -45,27 +47,43 @@ class DicomFeeder(object):
 
         set_len = len(this_set)
 
-        if self.__batch_index > set_len-1:
+        if self.__batch_index > set_len-1 and from_eval_set==0:
             np.random.shuffle(this_set)
             self.__batch_index = 0
             self.__epoch += 1
 
-        image_batch = self.__io.load_batch(
-                this_set[self.__batch_index], squelch=True).batch
+        if from_eval_set==1 and self.__batch_index_eval > set_len-1:
+            self.__batch_index_eval = 0
 
-        images = [np.expand_dims(x.image, axis=-1) for x in image_batch]
-        labels = [int(x.label) for x in image_batch]
+        if from_eval_set==0:
+            image_batch = self.__io.load_batch(
+                    this_set[self.__batch_index], squelch=True).batch
+            images = [np.expand_dims(x.image, axis=-1) for x in image_batch]
+            labels = [int(x.label) for x in image_batch]
+        else:
+            image_batch = self.__io.load_batch(
+                this_set[self.__batch_index_eval], squelch=True).batch
+            images = [np.expand_dims(x.image, axis=-1) for x in image_batch]
+            labels = [int(x.label) for x in image_batch]
 
         combined = list(zip(images, labels))
-        np.random.shuffle(combined)
+        if(from_eval_set==0):
+            np.random.shuffle(combined)
         images[:], labels[:] = zip(*combined)
-        
-        self.__batch_index += 1
+
+        if from_eval_set==0:
+            self.__batch_index += 1
+        else:
+            self.__image_index += 1
+            if self.__image_index > len(images)-1:
+                self.__image_index = 0
+                self.__batch_index_eval += 1
 
         if from_eval_set:
             images_agg = []
             labels_agg = []
-            rand_num = np.random.randint(1, 3)
+            #rand_num = np.random.randint(1, len(images)-1)
+            rand_num = self.__image_index
             #return rand_crop(images[:batch_size]), labels[:batch_size]  #ORIGINAL
             for i in xrange(batch_size):
                 images_agg.append(images[rand_num])
@@ -75,6 +93,8 @@ class DicomFeeder(object):
             shape = np.array(images[batch_size-1].shape)
             return rand_crop(images[:batch_size]), labels[:batch_size]
 
+    def get_evaluation_size(self):
+        return self.__eval_size
 
 def rand_crop(im):
     im_slice = []
