@@ -19,8 +19,8 @@ import numpy as np
 from six.moves import xrange
 
 # Global Variables
-IMAGE_SIZE = 120
-NUM_OF_RAND_CROP_PER_IMAGE = 5
+IMAGE_SIZE = 80
+NUM_OF_RAND_CROP_PER_IMAGE = 30
 
 class DicomFeeder(object):
     def __init__(self, DicomIO):
