@@ -11,35 +11,41 @@ class getstate(object):
         self.states = {
                 'C':{
                     'i':[i for i in range(1,12)],
-                    'f':[1,3,5],
+                    'f':[3,5,8],
                     'l':[1],
-                    'd':[64,128,256,512],
+                    'd':[1],#[64,128,256,512],
                     'n':[8,4,1]
                     },
                 'P':{
                     'i':[i for i in range(1,12)],
-                    'f,l':[(5,3),(3,2),(2,2)],
+                    'f,l':[(8,3),(5,2),(3,2)],
                     'n':[8,4,1]
                     },
                 'FC':{
                     'i':[i for i in range(1,12)],
-                    'n':[i for i in range(1,3)],
-                    'd':[512,256,128]
+                    'd':[512,256,128],
+                    'n':[i for i in range(1,3)]
                     },
+                'relu':{
+                    'i':[i for i in range(1,12)],
+                    'n':[1]
+                    },
+                'DO':{
+                    'i':[i for i in range(1,12)],
+                    'n':[1]
+                    },                
                 'TS':{
                     's':['prevstate']
-                    },
-                'start':{
-                        's':['start']
+                    }
                         }
-                }
+                
     
     def countstates(self):
         S = []
         count = 0
-        for i in self.states['start']:
-            S.append(('Start',count))
-            count+=1
+#        for i in self.states['start']:
+#            S.append(('Start',count))
+#            count+=1
         for i in self.states['C']['i']:
             for f in self.states['C']['f']:
                 for l in self.states['C']['l']:
@@ -57,6 +63,14 @@ class getstate(object):
                 for d in self.states['FC']['d']:
                             S.append(('FC',i,n,d,count))
                             count+=1
+        for i in self.states['DO']['i']:
+            for n in self.states['DO']['n']:
+                S.append(('DO',i,n,count))
+                count+=1
+        for i in self.states['relu']['i']:
+            for n in self.states['relu']['n']:
+                S.append(('relu',i,n,count))
+                count+=1
         for s in self.states['TS']:
             S.append(('Terminate',count))
             count+=1
@@ -71,7 +85,7 @@ class getstate(object):
             if s[0] !='Terminate':
                 r = ()
                 for sprime in S:
-                    if (s[0]=='C' or s[0]=='P' or s[0]=='FC'):
+                    if (s[0]=='C' or s[0]=='P' or s[0]=='FC' or s[0]=='DO' or s[0]=='relu'):
                         if s[1]==11:
                             r=r+(S[-1][-1],) #terminate state for max layers
                         elif sprime[1]==s[1]+1:
@@ -80,17 +94,19 @@ class getstate(object):
                                     r=r+(S[-1][-1],) #terminate state
                                 elif s[2]>=sprime[2]:
                                     r=r+(sprime[-1],)
-                            if s[0]=='C':
+                            elif s[0]=='C' or s[0]=='DO' or s[0]=='relu':
                                 r=r+(sprime[-1],)
-                            if s[0]=='P' and sprime[0]!='P':
+                            elif s[0]=='P' and sprime[0]!='P':
                                 if sprime[0]=='FC':
                                     if s[4]<8:
                                         r=r+(sprime[-1],)
                                 else:
                                     r=r+(sprime[-1],)
-                    elif s[0] =='Start':  
-                        if sprime[0] != 'Terminate':
-                            r=r+(sprime[-1],)
+#                            elif sprime[0]=='DO':
+#                                print(s[0])
+#                    elif s[0] =='Start':  
+#                        if sprime[0] != 'Terminate':
+#                            r=r+(sprime[-1],)
                 
                 
                 newA = tuple(set(r))
