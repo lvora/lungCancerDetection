@@ -17,6 +17,7 @@ img_cols = 512
 
 smooth = 1.
 
+
 def dice_coef(y_true, y_pred):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
@@ -31,6 +32,7 @@ def dice_coef_np(y_true,y_pred):
 
 def dice_coef_loss(y_true, y_pred):
     return -dice_coef(y_true, y_pred)
+
 
 def get_unet():
     inputs = Input((1,img_rows, img_cols))
@@ -78,16 +80,6 @@ def get_unet():
     return model
 
 
-def reshape_image(imgs):
-    size_x = np.shape(imgs)[0]
-    size_y = np.shape(imgs)[1]
-
-    pad_x = int((512-size_x)/2)
-    pad_y = math.ceil((512-size_y)/2)
-
-    imgs = np.lib.pad(imgs, (pad_x,pad_y), 'constant', constant_values=(0,0))
-    return(imgs)
-
 def train_and_predict(use_existing):
     print('-'*30)
     print('Loading and preprocessing train data...')
@@ -130,7 +122,7 @@ def train_and_predict(use_existing):
     #model.fit(imgs_train, imgs_mask_train, batch_size=2, nb_epoch=20, verbose=1, shuffle=True,
     #          callbacks=[model_checkpoint])
 
-    model.fit(imgs_train, imgs_mask_train, batch_size=2, nb_epoch=100, verbose=1, shuffle=True,
+    model.fit(imgs_train, imgs_mask_train, batch_size=2, nb_epoch=1, verbose=1, shuffle=True,
               callbacks=[model_checkpoint])
 
     # loading best weights from training session

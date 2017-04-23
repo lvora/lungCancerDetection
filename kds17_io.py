@@ -238,3 +238,11 @@ class DicomIO:
             [t.start() for t in threads]
             [t.join() for t in threads]
             self.save_batch(y)
+        
+
+
+
+
+
+        
+
