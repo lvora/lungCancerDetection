@@ -62,8 +62,10 @@ Returns uint16 version
 ############
 #
 # Getting list of image files
-luna_path = "/home/praneetha/Downloads/"          # Path with all the subset folders of LUNA dataset
-output_path = "/home/praneetha/luna_data_set/"
+#luna_path = "/home/praneetha/Downloads/"          # Path with all the subset folders of LUNA dataset
+#output_path = "/home/praneetha/luna_data_set/"
+luna_path = "/home/anand/anand_repos/kds17/Luna16/"
+output_path = "/home/anand/anand_repos/kds17/Luna16/generated"
 
 file_list_subsets = glob(luna_path+"subset[0-9]")
 

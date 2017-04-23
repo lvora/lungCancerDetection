@@ -5,7 +5,8 @@ from sklearn.cluster import KMeans
 from skimage.transform import resize
 from glob import glob
 
-working_path = "/home/praneetha/luna_data_set/"
+#working_path = "/home/praneetha/luna_data_set/"
+working_path = "/home/anand/anand_repos/kds17/Luna16/generated/"
 file_list=glob(working_path+"images_*.npy")
 
 for img_file in file_list:

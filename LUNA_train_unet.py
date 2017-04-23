@@ -8,7 +8,8 @@ from keras.optimizers import SGD
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras import backend as K
 
-working_path = "/home/praneetha/luna_data_set/"
+#working_path = "/home/praneetha/luna_data_set/"
+working_path = "/home/anand/anand_repos/kds17/Luna16/generated/"
 
 K.set_image_dim_ordering('th')  # Theano dimension ordering in this code
 
