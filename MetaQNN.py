@@ -88,7 +88,7 @@ def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A):
     for episode in range(1,M):
         S,U = SAMPLE_NEW_NETWORK(epsilon,Q,statespace,A)
         print('Network Layout: ',[statespace[i] for i in S])
-        accuracy = run_train(DicomIO, S, statespace,U)
+        accuracy = run_train(DicomIO, S, statespace,U,max_steps=MAX_STEPS)
         replay_memory.append((S,U,accuracy))
         for memory in range(K_ER):
             S_sample, U_sample, accuracy_sample = replay_memory[int(random.uniform(0,len(replay_memory)))]
