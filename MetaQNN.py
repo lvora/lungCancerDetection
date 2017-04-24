@@ -82,8 +82,8 @@ def __add_loss_summaries(total_loss):
         tf.summary.scalar(l.op.name, loss_averages.average(l))
     return loss_averages_op
 
-def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A):
-    replay_memory = []
+def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A,replay_memory = []):
+    
     Q = tf.Variable(tf.constant(0.5, shape=[NUMSTATES, NUMSTATES]),name='Q')
     for episode in range(1,M):
         S,U = SAMPLE_NEW_NETWORK(epsilon,Q,statespace,A)
@@ -94,7 +94,7 @@ def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A):
             S_sample, U_sample, accuracy_sample = replay_memory[int(random.uniform(0,len(replay_memory)))]
             Q = UPDATE_Q_VALUES(Q,S_sample,U_sample,accuracy_sample)
 
-    return Q,S,U
+    return Q,S,U,replay_memory
 
 def SAMPLE_NEW_NETWORK(epsilon, Q,statespace,A):
     S = [statespace[0][1]]
