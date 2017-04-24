@@ -13,28 +13,31 @@
 # limitations under the License.
 # ==============================================================================
 
-#import kds17_tf_model as tf_model
+import kds17_tf_model_lv as tf_model
 import kds17_io as kio
 import kds_Qstatespace as SA
 import kds_MetaQNN as QNN
 
 def main(argv = None):
-    im_dir = '/home/charlie/kaggle_data/stage1'
-    label_dir = '/home/charlie/kaggle_data/stage1_labels.csv'
-    pickle_dir = '/home/charlie/kaggle_pickles/'
+    im_dir = r'C:\Users\jeremy\projects\stage1\100'
+    label_dir = r'C:\Users\jeremy\projects\stage1\stage1_labels.csv'
+    pickle_dir = r'C:\Users\jeremy\projects\kaggle_pickle1' 
 
     io = kio.DicomIO(pickle_dir, im_dir, label_dir) 
-    #tf_model.run_train(io, 10000)
-    
-    sa = SA.getstate()
-    NUMSTATES, S = sa.countstates()
-    NUMACTIONS,A = sa.countactions()
-    
-    epsilon = ((10,1),(1,0.9),(1,0.8),(1,0.7),(1,0.6),(1,0.5),(1,0.4),
-               (1,0.3),(1,0.2),(1,0.1))
-    for i in range(len(epsilon)):
-        Q,Sprime,Aprime = QNN.Q_learning(io,NUMSTATES,NUMACTIONS,epsilon[i][0],epsilon[i][1],S,A)
-    #tf_model.run_test(io, 10)
+    if 0:
+        tf_model.run_train(io, 10)
+    else:
+        sa = SA.getstate()
+        NUMSTATES, S = sa.countstates()
+        NUMACTIONS,A = sa.countactions()
+        
+        epsilon = ((500,1),(100,0.9),(100,0.8),(100,0.7),(100,0.6),(100,0.5),(100,0.4),
+                   (100,0.3),(200,0.2),(300,0.1))
+        
+        for i in range(len(epsilon)):
+            print('epsilon',epsilon[i])
+            Q,Sprime,Aprime = QNN.Q_learning(io,NUMSTATES,NUMACTIONS,epsilon[i][0],epsilon[i][1],S,A)
+        #tf_model.run_test(io, 10)
 
 if __name__ == '__main__':
     main()
