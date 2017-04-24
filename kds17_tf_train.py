@@ -33,10 +33,10 @@ def main(argv = None):
         
         epsilon = ((500,1),(100,0.9),(100,0.8),(100,0.7),(100,0.6),(100,0.5),(100,0.4),
                    (100,0.3),(200,0.2),(300,0.1))
-        
+        replay_memory = []
         for i in range(len(epsilon)):
             print('epsilon',epsilon[i])
-            Q,Sprime,Aprime = QNN.Q_learning(io,NUMSTATES,NUMACTIONS,epsilon[i][0],epsilon[i][1],S,A)
+            Q,Sprime,Aprime,replay_memory = QNN.Q_learning(io,NUMSTATES,NUMACTIONS,epsilon[i][0],epsilon[i][1],S,A,replay_memory)
         #tf_model.run_test(io, 10)
 
 if __name__ == '__main__':
