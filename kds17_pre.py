@@ -28,7 +28,7 @@ from skimage import measure, morphology
 import threading
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format='[%(threadName)-9s] %(message)s',)
+logging.basicConfig(level=logging.DEBUG, format='[%(threadName)-9s] %(message)s',) '''Logging Format Specification command'''
 
 class DicomImage:
     '''DicomImage 
@@ -48,19 +48,22 @@ class DicomImage:
         DicomImage.<Args>
 
     '''
-    def __init__(self, path_to_image, label, im_id):
-        self.path_to_image = path_to_image
-        self.label = label
-        self.im_id = im_id
-        self.image, self.spacing = self.__load_scan()
+    def __init__(self, path_to_image, label, im_id): '''Initialization method/Constructor containing arguments self, path_to_image, label, im_id'''
+        self.path_to_image = path_to_image '''Assigns the path_to_image constructor argument to the self.path_to_image variable'''
+        self.label = label '''Assigns the label constructor argument to the self.label variable'''
+        self.im_id = im_id '''Assigns the im_id constructor argument to the self.im_id variable'''
+        self.image, self.spacing = self.__load_scan() '''The values returned from the self.__load_scan() function are assigned to the self.image and the self.spacing 
+variables'''
 
-    def __rescale(self, slices):
-        image = np.stack([s.pixel_array for s in slices])
-        image = image.astype(np.int16)
-        image[image == -2000] = 0
-        for i in range(len(slices)):
-            intercept = slices[i].RescaleIntercept
-            slope = slices[i].RescaleSlope
+    def __rescale(self, slices): '''Class method __rescale with arguments self and slices'''
+        image = np.stack([s.pixel_array for s in slices]) '''Concatenates the s.pixel arrays and stores result under the variable image'''
+        image = image.astype(np.int16) '''.astype() numpy method converts numpy int16 to an array and stores it under the variable image.'''
+        image[image == -2000] = 0 '''Assigns 0 to images/pixels that are out of scan.'''
+        for i in range(len(slices)): '''For Loop to execute command over a number of times equal to the number of elements in slices'''
+            intercept = slices[i].RescaleIntercept '''The value b [in the relationship between stored values (SV) in Pixel Data and the output units {Output units = m*SV + b}]
+for each slice is assigned a variable intercept'''
+            slope = slices[i].RescaleSlope '''The value m [in the relationship between stored values (SV) in Pixel Data and the output units {Output units = m*SV + b}]
+for each slice is assigned a variable slope'''
             if slope != 1:
                 image[i] = slope * image[i].astype(np.float64)
                 image[i] = image[i].astype(np.int16)
