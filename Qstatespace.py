@@ -20,30 +20,34 @@ class getstate(object):
     def __init__(self):
         self.states = {
                 'C':{
-                    'i':[i for i in range(1,12)],
+                    'i':[i for i in range(1,MAXDEPTH)],
                     'f':[3,5,8],
                     'l':[1],
                     'd':[1],#[64,128,256,512],
                     'n':[8,4,1]
                     },
                 'P':{
-                    'i':[i for i in range(1,12)],
-                    'f,l':[(8,3),(5,2),(3,2)],
+                    'i':[i for i in range(1,MAXDEPTH)],
+                    'f,l':[(3,2),(2,2)],#[(8,3),(5,2),(3,2)],
                     'n':[8,4,1]
                     },
                 'FC':{
-                    'i':[i for i in range(1,12)],
+                    'i':[i for i in range(1,MAXDEPTH)],
                     'd':[512,256,128],
                     'n':[i for i in range(1,3)]
                     },
                 'relu':{
-                    'i':[i for i in range(1,12)],
+                    'i':[i for i in range(1,MAXDEPTH)],
                     'n':[1]
                     },
                 'DO':{
-                    'i':[i for i in range(1,12)],
+                    'i':[i for i in range(1,MAXDEPTH)],
                     'n':[1]
-                    },                
+                    },           
+                'start':
+                    {
+                    's':['start']      
+                        },
                 'TS':{
                     's':['prevstate']
                     }
@@ -53,9 +57,9 @@ class getstate(object):
     def countstates(self):
         S = []
         count = 0
-#        for i in self.states['start']:
-#            S.append(('Start',count))
-#            count+=1
+        for i in self.states['start']['s']:
+            S.append(('Start',0))
+            count+=1
         for i in self.states['C']['i']:
             for f in self.states['C']['f']:
                 for l in self.states['C']['l']:
@@ -66,13 +70,13 @@ class getstate(object):
         for i in self.states['P']['i']:
             for fl in self.states['P']['f,l']:
                 for n in self.states['P']['n']:
-                            S.append(('P',i,fl[0],fl[1],n,count))
-                            count+=1
-        for i in self.states['FC']['i']:
-            for n in self.states['FC']['n']:
-                for d in self.states['FC']['d']:
-                            S.append(('FC',i,n,d,count))
-                            count+=1
+                    S.append(('P',i,fl[0],fl[1],n,count))
+                    count+=1
+#        for i in self.states['FC']['i']:
+#            for n in self.states['FC']['n']:
+#                for d in self.states['FC']['d']:
+#                            S.append(('FC',i,n,d,count))
+#                            count+=1
         for i in self.states['DO']['i']:
             for n in self.states['DO']['n']:
                 S.append(('DO',i,n,count))
@@ -96,7 +100,7 @@ class getstate(object):
                 r = ()
                 for sprime in S:
                     if (s[0]=='C' or s[0]=='P' or s[0]=='FC' or s[0]=='DO' or s[0]=='relu'):
-                        if s[1]==11:
+                        if s[1]==MAXDEPTH-1:
                             r=r+(S[-1][-1],) #terminate state for max layers
                         elif sprime[1]==s[1]+1:
                             if s[0]=='FC':
@@ -112,12 +116,11 @@ class getstate(object):
                                         r=r+(sprime[-1],)
                                 else:
                                     r=r+(sprime[-1],)
-#                            elif sprime[0]=='DO':
-#                                print(s[0])
-#                    elif s[0] =='Start':  
-#                        if sprime[0] != 'Terminate':
-#                            r=r+(sprime[-1],)
-                
+                            elif sprime[0]=='DO':
+                                print(s[0])
+                    elif s[0]=='Start':
+                        if sprime[1]==s[1]+1:
+                            r=r+(sprime[-1],)
                 
                 newA = tuple(set(r))
                 lists = ()
@@ -126,12 +129,15 @@ class getstate(object):
                     counter+=1
                 A[s[-1]] = newA
                 
-                #counter+=len(tuple(set(r)))
         return counter,A                    
 
-
+#def main():
+#    
 sa = getstate()
 NUMSTATES, S = sa.countstates()
 NUMACTIONS,A = sa.countactions()
-#print(NUMSTATES,NUMACTIONS)
-#563,23551
+##print(NUMSTATES,NUMACTIONS)
+## #563,23551
+#
+#if __name__ == '__main__':
+#     main()
