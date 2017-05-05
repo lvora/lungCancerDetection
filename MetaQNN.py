@@ -19,6 +19,7 @@ import kds_Qstatespace as SA
 import tensorflow as tf
 import numpy as np
 import random
+import pandas as pd
 
 from six.moves import xrange
 import time
@@ -29,12 +30,12 @@ import kds17_io as kio
 
 IMAGE_SIZE = tf_input.IMAGE_SIZE
 NUM_CLASSES = 2
-BATCH_SIZE = 1
+BATCH_SIZE = 2
 #MAX_STEPS = 1000000
-MAX_STEPS = 1000
+MAX_STEPS = 10
 MOVING_AVERAGE_DECAY = 0.99
 NUM_EPOCHS_PER_DECAY = 350.0
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 1000
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 100
 LEARNING_RATE_DECAY_FACTOR = 1e-07
 INITIAL_LEARNING_RATE = 5e-04
 DECAY = 0.4
@@ -55,6 +56,11 @@ K_ER = 10
 
 folder = 1
 train_dir_root = r'C:\Users\jeremy\projects\kds_train1'
+replay_memory_csv_file = r'C:\Users\jeremy\projects\kds_train1\replay_memory1.csv'
+Q_csv_file = r'C:\Users\jeremy\projects\kds_train1\Q.csv'
+
+
+
 
 def __activation_summary(x):
     tensor_name = x.op.name
@@ -82,32 +88,151 @@ def __add_loss_summaries(total_loss):
         tf.summary.scalar(l.op.name, loss_averages.average(l))
     return loss_averages_op
 
-def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A,replay_memory = []):
+def Init_Q(A,statespace):
+    if os.path.exists(Q_csv_file):
+        head = [i for i in range(len(statespace))]
+        Q = pd.read_csv(Q_csv_file, header = 0,index_col=0)
+        Q.columns = head
+    else:
+        aindex = []
+        Akeys = list(A.keys())
+        for key in Akeys:
+            for item in list(A[key]):
+                aindex.append(item)
+        aindex = list(set(aindex))
+        Q = pd.DataFrame(np.zeros([len(aindex),len(statespace)]),index=aindex)
+        for key in Akeys:
+            for item in list(A[key]):
+                Q[key][item]=0.5
+    return Q
+
+def Init_replay():
+
+    rm_df = pd.DataFrame([])
     
-    Q = tf.Variable(tf.constant(0.5, shape=[NUMSTATES, NUMSTATES]),name='Q')
-    for episode in range(1,M):
+    replay_memory = []
+    if os.path.exists(replay_memory_csv_file):
+        rm_df = pd.read_csv(replay_memory_csv_file, header = 0)
+        for index,row in rm_df.iterrows():
+            Smem = str(row['S']).split('[')[1].split(']')[0].split(',')
+            Umem = str(row['U']).split('[')[1].split(']')[0].split(',')
+            Smem = [int(i) for i in Smem]
+            Umem = [int(i) for i in Umem]
+            replay_memory.append((Smem,Umem,row['accuracy']))
+    else:
+        replay_memory = []
+    return replay_memory
+
+def Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A,MAX_STEPS=10):
+    
+    acc_csv_file = r'C:\Users\jeremy\projects\kds_train1\acc'+str(epsilon)+'.csv'
+    
+    Q = Init_Q(A,statespace)
+    replay_memory = Init_replay()
+    rm = []
+    accuracy_track = []
+    
+##    Q = tf.Variable(tf.constant(0.5, shape=[NUMSTATES, NUMSTATES]),name='Q')
+#    aindex = []
+##    Q = pd.DataFrame(np.zeros([len(A),len(statespace)]))
+#    
+#    Akeys = list(A.keys())
+#    for key in Akeys:
+#        for item in list(A[key]):
+##            Q[key][item]=0.5
+#            aindex.append(item)
+#    aindex = list(set(aindex))
+#    Q = pd.DataFrame(np.zeros([len(aindex),len(statespace)]),index=aindex)
+#    for key in Akeys:
+#        for item in list(A[key]):
+#            Q[key][item]=0.5
+    
+    print("Shape: ",[NUMSTATES, NUMSTATES])
+    
+#    rm_df = pd.DataFrame([])
+#    
+#    replay_memory = []
+#    rm = []
+#    if os.path.exists(replay_memory_csv_file):
+#        rm_df = pd.read_csv(replay_memory_csv_file, header = 0)
+#        for index,row in rm_df.iterrows():
+#            Smem = str(row['S']).split('[')[1].split(']')[0].split(',')
+#            Umem = str(row['U']).split('[')[1].split(']')[0].split(',')
+#            Smem = [int(i) for i in Smem]
+#            Umem = [int(i) for i in Umem]
+#            replay_memory.append((Smem,Umem,row['accuracy']))
+            
+    for episode in range(M):
         S,U = SAMPLE_NEW_NETWORK(epsilon,Q,statespace,A)
+#        S = replay_memory[episode][0]
+#        U = replay_memory[episode][1]
+#        accuracy = replay_memory[episode][2]
+        
+        print('epsilon: %f episode: %i' % (epsilon,episode))
         print('Network Layout: ',[statespace[i] for i in S])
         accuracy = run_train(DicomIO, S, statespace,U,max_steps=MAX_STEPS)
+
+        print('accuracy: ',accuracy)
+        accuracy_track.append([episode,accuracy])
         replay_memory.append((S,U,accuracy))
+        rm.append((str(S),str(U),accuracy))
+        
+        if episode%1 == 0:
+            
+            rm_df = pd.DataFrame(rm,columns=['S','U','accuracy'])
+            
+            if os.path.exists(replay_memory_csv_file):
+                df = pd.read_csv(replay_memory_csv_file, header = 0)
+                df = pd.concat([df,rm_df])
+                df = df.drop_duplicates(subset=['S','U'],keep='last')
+                df = df.reset_index()
+                df.drop(['index'],axis=1,inplace=True)
+            else:
+                df = rm_df
+            df.to_csv(replay_memory_csv_file,index=False, header=1)
+            
+            df_acc = pd.DataFrame(accuracy_track,columns=['iteration','accuracy'])
+            
+            if os.path.exists(acc_csv_file):
+                dfa = pd.read_csv(acc_csv_file, header = 0)
+                dfa = pd.concat([dfa,df_acc])
+                # dfa = dfa.drop_duplicates(subset=['iteration'],keep='last')
+                dfa = dfa.reset_index()
+                dfa.drop(['index'],axis=1,inplace=True)
+            else:
+                dfa = df_acc
+                
+            dfa.to_csv(acc_csv_file,index=False, header=1)
+            
+            if os.path.exists(train_dir_root+'\stop.txt'):
+                return Q,S,U,accuracy_track,episode
+#        print(rm_df)
         for memory in range(K_ER):
             S_sample, U_sample, accuracy_sample = replay_memory[int(random.uniform(0,len(replay_memory)))]
+#            print('sample')
+#            print(S_sample, U_sample, accuracy_sample)
             Q = UPDATE_Q_VALUES(Q,S_sample,U_sample,accuracy_sample)
+        
+        if episode%1 == 0:
+            Q.to_csv(Q_csv_file,index=True, header=1)
 
-    return Q,S,U,replay_memory
+    return Q,S,U,accuracy_track,episode
 
 def SAMPLE_NEW_NETWORK(epsilon, Q,statespace,A):
-    S = [statespace[0][1]]
-    U = [0]
-    while U[-1] != statespace[-1][1]:
+    S = [0]
+    U = []
+    while S[-1] != statespace[-1][1]:
         alpha = random.uniform(0,1)
         if alpha > epsilon:
-
-            u = tf.arg_max(Q[0],dimension=1)
+#            print('here')
+#            u = tf.arg_max(Q[0],dimension=1)
+            u = np.argmax(Q[S[-1]])
             sprime = TRANSITION(S[-1],u)
         else:
+#            print('there')
             u = A[S[-1]][int(random.uniform(0,len(A[S[-1]])-1))]
             sprime = TRANSITION(S[-1],u)
+#        print(u)
         U.append(u)
         S.append(sprime)
             
@@ -115,10 +240,16 @@ def SAMPLE_NEW_NETWORK(epsilon, Q,statespace,A):
 
 def UPDATE_Q_VALUES(Q,S,U,accuracy):
     global alpha
-    
-    Q[S[-1],U[-1]].assign((1-alpha)*Q[S[-1],U[-1]] + alpha*accuracy)
-    for i in reversed(range(len(S)-2)):
-        Q[S[i],U[i]].assign((1-alpha)*Q[S[i],U[i]] + alpha*Q[S[i+1],U[i]])
+#    print(S)
+#    print(U)
+#    Q[S[-1],U[-1]].assign((1-alpha)*Q[S[-1],U[-1]] + alpha*accuracy)
+    Q[S[-2]][S[-1]] = (1-alpha)*Q[S[-2]][S[-1]] + alpha*accuracy
+    for i in reversed(range(len(S)-1)):
+        #        print(S[i],S[i+1])
+        
+#        Q[S[i],U[i]].assign((1-alpha)*Q[S[i],U[i]] + alpha*Q[S[i+1],U[i]])
+
+        Q[S[i]][S[i+1]] =(1-alpha)*Q[S[i]][S[i+1]] + alpha*Q[S[i+1]][np.argmax(Q[S[i+1]])]
     return Q
 
 def TRANSITION(s,u):
@@ -127,12 +258,12 @@ def TRANSITION(s,u):
 
 
 def MetaQNN(images, keep_prob,S,s):
-    print(len(S))
-    if len(S)>0:
-        out1 = modelstep(images, S[0],s,keep_prob)
-        if len(S)==1: return out1
+#    print(len(S))
+    # if len(S)>0:
+        # out1 = modelstep(images, S[0],s,keep_prob)
+        # if len(S)==1: return out1
     if len(S)>1:
-        out2 = modelstep(out1, S[1],s,keep_prob)
+        out2 = modelstep(images, S[1],s,keep_prob)
         if len(S)==2: return out2
     if len(S)>2:
         out3 = modelstep(out2, S[2],s,keep_prob)
@@ -170,6 +301,7 @@ def MetaQNN(images, keep_prob,S,s):
 
 
 def modelstep(ins, S,s,keep_prob):
+    print(str(S))
     if s[S][0] == 'C':
         FILTER_SIZE = s[S][2]
         l = s[S][3]
@@ -256,10 +388,12 @@ def modelstep(ins, S,s,keep_prob):
     if s[S][0] == 'Terminate':
         
         x = ins.get_shape()[1]
+        print('x',x)
         if 1:#x <= 8:
             with tf.variable_scope('softmax_linear') as scope:
                 reshape = tf.reshape(ins, [BATCH_SIZE, -1])
                 dim = reshape.get_shape()[1]
+                print('dim',dim)
                 weights = __var_on_cpu_mem('weights', [dim, NUM_CLASSES], DECAY)
                 biases = __var_on_cpu_mem('biases',
                                           [NUM_CLASSES],
@@ -409,39 +543,47 @@ def run_train(DicomIO,S,statespace,U, max_steps=10, logits_op=None):
                                                 False,
                                                 keep_prob,
                                                 DROPOUT_VAL)
-            _, loss_value, summary_str = sess.run([train_op,loss_val,summary_op],feed_dict=feed_dict)
-            duration = time.time() - start_time
-            assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
-            examples_per_sec = BATCH_SIZE / duration
-            sec_per_batch = float(duration)
-            format_str = ('step %d, loss = %.2f (%.1f examples/sec; %.3f '
-                          'sec/batch)')
-            print(format_str % (step,
-                                loss_value,
-                                examples_per_sec,
-                                sec_per_batch))
-
-            if step % 10 == 0:
-                summary_writer.add_summary(summary_str, step)
-                checkpoint_path = os.path.join(train_dir, 'model.ckpt')
-                saver.save(sess, checkpoint_path, global_step=step)
-
-            if step%10 == 0: #step%1000 == 0:
-                num_correct = 0
-                for i in xrange(10):  # 10 here can be replaced with number of evaluation images or portion of it
-                    feed_dict = tf_input.fill_feed_dict(feeder,
-                                                        images,
-                                                        labels,
-                                                        BATCH_SIZE,
-                                                        True,
-                                                        keep_prob,DROPOUT_VAL)
-                    pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
-                    num_correct = num_correct + pred[0]
-                accuracy_eval = num_correct / 10
-                format_str = ('EVALUATION SET: step %d, loss = %.2f, accuracy=%.2f')
+            try:
+                _, loss_value, summary_str = sess.run([train_op,loss_val,summary_op],feed_dict=feed_dict)
+                duration = time.time() - start_time
+                assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+                examples_per_sec = BATCH_SIZE / duration
+                sec_per_batch = float(duration)
+                format_str = ('step %d, loss = %.2f (%.1f examples/sec; %.3f '
+                              'sec/batch)')
                 print(format_str % (step,
                                     loss_value,
-                                    accuracy_eval))
+                                    examples_per_sec,
+                                    sec_per_batch))
+
+                if step % 10 == 0:
+                    summary_writer.add_summary(summary_str, step)
+                    checkpoint_path = os.path.join(train_dir, 'model.ckpt')
+                    saver.save(sess, checkpoint_path, global_step=step)
+
+                if (step+1)%250 == 0: #step%1000 == 0:
+                    num_correct = 0
+                    n_samples = 10
+                    for i in xrange(n_samples):  # 10 here can be replaced with number of evaluation images or portion of it
+                        try:
+                            feed_dict = tf_input.fill_feed_dict(feeder,
+                                                                images,
+                                                                labels,
+                                                                BATCH_SIZE,
+                                                                True,
+                                                                keep_prob,DROPOUT_VAL)
+                            pred, loss_value = sess.run([eval_op, loss_val], feed_dict=feed_dict)
+                            num_correct = num_correct + pred[0]
+                        except (IndexError, ValueError):
+                            print('VslueError in testing: ',i)
+                            n_samples-=1
+                    accuracy_eval = num_correct / n_samples
+                    format_str = ('EVALUATION SET: step %d, loss = %.2f, accuracy=%.2f')
+                    print(format_str % (step,
+                                        loss_value,
+                                        accuracy_eval))
+            except ValueError:
+                print('ValueError in step ',step)
     return accuracy_eval
 
 def main():
@@ -464,12 +606,17 @@ def main():
                 s.append(item2[-1])
                 print(S[item2[-1]])
 
-    im_dir = r'C:\Users\jeremy\projects\stage1\100'
+    im_dir = r'C:\Users\jeremy\projects\stage1'
     label_dir = r'C:\Users\jeremy\projects\stage1\stage1_labels.csv'
     pickle_dir = r'C:\Users\jeremy\projects\kaggle_pickle1' 
     DicomIO = kio.DicomIO(pickle_dir, im_dir, label_dir)
     
-    run_train(DicomIO, s, S)              
+#    run_train(DicomIO, s, S)
+    M = 1000
+    epsilon = 0.8
+    statespace = S       
+    rm_df = Q_learning(DicomIO,NUMSTATES,NUMACTIONS,M,epsilon,statespace,A,MAX_STEPS=10)
+    print(rm_df)   
 
-# if __name__ == '__main__':
-     #main()
+if __name__ == '__main__':
+     pass #main()
